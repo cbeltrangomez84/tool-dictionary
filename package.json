@@ -1,0 +1,67 @@
+{
+  "name": "tool-dictionary",
+  "version": "0.1.0",
+  "description": "A portable format for describing thousands of callable tools, and a service that lets an agent search it — so it finds the two or three it needs without loading the rest.",
+  "keywords": [
+    "tool-dictionary",
+    "agents",
+    "llm",
+    "tool-discovery",
+    "tool-search",
+    "progressive-disclosure",
+    "openapi",
+    "json-schema",
+    "mcp",
+    "specification"
+  ],
+  "license": "Apache-2.0",
+  "author": "Carlos Beltran",
+  "homepage": "https://github.com/cbeltrangomez84/tool-dictionary#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cbeltrangomez84/tool-dictionary.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cbeltrangomez84/tool-dictionary/issues"
+  },
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "tool-dictionary": "dist/index.js",
+    "tool-dictionary-gen": "dist/generate/cli.js"
+  },
+  "files": [
+    "dist",
+    "spec/schema",
+    "LICENSE",
+    "NOTICE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit --noUnusedLocals --noUnusedParameters",
+    "validate:spec": "node scripts/validate-example.mjs",
+    "conformance": "tsx scripts/build-conformance.ts",
+    "example": "tsx scripts/build-example.ts",
+    "generate": "tsx src/generate/cli.ts",
+    "check": "npm run typecheck && npm test && npm run validate:spec && npm run build"
+  },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "fastify": "^5.12.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.3",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}

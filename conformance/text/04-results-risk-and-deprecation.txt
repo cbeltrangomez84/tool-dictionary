@@ -1,0 +1,41 @@
+DICTIONARY vectors v4 — 3 results for "alert"
+
+1. alert_create — Create a price alert
+   Watch a token and notify the caller when its price crosses a threshold.
+   BETA
+   RISK: write
+   path: alerts
+   The alert fires once and is then inactive; recreate it to watch again. Thresholds are in USD and are compared against the same price feed token_price reads.
+   input: address (string, required) — Token contract address or mint.
+          threshold (number, required) — Price in USD that triggers the alert.
+          direction (string, one of above|below, default "above")
+          note (string) — Free text echoed back when the alert fires.
+   returns: The created alert, with its id and the price it is watching.
+   call: POST https://alerts.example.com/v1/alerts  (auth: x-api-key header)
+   cost: standard — Counts against the alert quota, not the query quota.
+   example: {"address":"So11111111111111111111111111111111111111112","threshold":250}  (fires when SOL goes above $250)
+   example: {"address":"So11111111111111111111111111111111111111112","threshold":100,"direction":"below"}
+   see also: alert_delete (pairs_with) — the same id is what cancels it
+   see also: alert_create_v0 (predecessor) — same alert, and it accepts a direction
+
+2. alert_delete — Delete a price alert
+   Cancel an alert so it never fires.
+   RISK: destructive
+   path: alerts
+   input: id (string, required) — Alert id returned by alert_create.
+   returns: Nothing beyond a confirmation.
+   call: DELETE https://alerts.example.com/v1/alerts/{id}  (auth: x-api-key header)
+   see also: alert_create (pairs_with) — the same id is what cancels it
+
+3. alert_create_v0 — Create a price alert (legacy)
+   The pre-2026 alert endpoint, kept alive for callers that have not migrated.
+   DEPRECATED
+   RISK: write
+   path: alerts
+   input: mint (string, required)
+          usd (number, required)
+   call: POST https://alerts.example.com/v0/alerts  (auth: x-api-key header)
+   see also: alert_create (successor) — same alert, and it accepts a direction
+
+To use one, call it with the input shown. To see the full definition of any of
+these, search again with its exact name.

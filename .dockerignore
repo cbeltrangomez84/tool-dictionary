@@ -1,0 +1,7 @@
+node_modules
+dist
+coverage
+.git
+*.log
+config/*.json
+!config/local.example.json

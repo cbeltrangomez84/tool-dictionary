@@ -1,0 +1,9 @@
+DICTIONARY crypto-data v47 — 1 result for "market cap"
+
+1. token_market_cap — Token market cap
+   Market capitalisation of a token: price times circulating supply, in USD.
+   path: tokens/price
+   see also: token_price (alternative) — price times supply, if the question was about size not unit price
+
+To use one, call it with the input shown. To see the full definition of any of
+these, search again with its exact name.

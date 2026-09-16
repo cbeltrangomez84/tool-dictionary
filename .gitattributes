@@ -1,0 +1,2 @@
+# Conformance vectors are byte-exact: no EOL normalization, no added final newline.
+conformance/text/*.txt -text

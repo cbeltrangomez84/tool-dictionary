@@ -1,0 +1,14 @@
+DICTIONARY crypto-data v47 — 1 result for "holders"
+NOTE: The definition of holders_count exceeds the response budget; fetch it from /entries/holders_count.
+
+1. holders_count — Token holder count
+   Number of distinct wallets currently holding a token.
+   path: tokens/holders
+   see also: holders_percentage (alternative) — share of supply per holder, not a count
+   see also: holders_top (pairs_with) — who the largest holders actually are
+   see also: token_resolve_symbol (prerequisite) — if you only have a ticker, not an address
+
+MORE: pass cursor "eyJxIjoiaG9sZGVycyIsIm8iOjF9" to continue.
+
+To use one, call it with the input shown. To see the full definition of any of
+these, search again with its exact name.

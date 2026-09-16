@@ -1,0 +1,358 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tool-dictionary.org/schema/0.1/dictionary.schema.json",
+  "title": "Tool Dictionary 0.1",
+  "description": "A portable catalog of callable tools, searchable by an agent. Structural validation only; the cross-reference rules in spec section 17.1 are enforced by the validator, not by this schema.",
+  "type": "object",
+  "required": ["toolDictionary", "id", "title", "summary", "version", "generatedAt", "index", "entries"],
+  "additionalProperties": true,
+  "properties": {
+    "toolDictionary": { "const": "0.1" },
+    "id": { "$ref": "#/$defs/dictionaryId" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "version": { "type": "integer", "minimum": 1 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "locale": { "type": "string", "default": "en" },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "baseUrl": {
+          "type": "string",
+          "pattern": "^https?://[^\\s?#]+$",
+          "description": "Absolute, no query or fragment. May contain {{VARIABLE}} references (spec section 5.5), which is why this is a pattern and not format: uri."
+        },
+        "auth": { "$ref": "#/$defs/auth" },
+        "headers": { "$ref": "#/$defs/safeHeaders" },
+        "timeoutHintMs": { "type": "integer", "minimum": 1, "maximum": 300000 },
+        "variables": {
+          "type": "object",
+          "description": "Values the executor supplies at call time, referenced as {{NAME}} from URLs, query, headers and auth.value. Names only: a value never appears in a dictionary. Every reference MUST be declared here (spec section 5.5).",
+          "propertyNames": { "pattern": "^[A-Z][A-Z0-9_]{0,63}$" },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "secret": { "type": "boolean", "description": "A secret may only be referenced from auth.value." },
+              "description": { "type": "string", "maxLength": 200 }
+            }
+          }
+        }
+      }
+    },
+    "synonyms": {
+      "type": "object",
+      "description": "Canonical term -> equivalents. Applied as bidirectional query expansion.",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "maxItems": 32
+      }
+    },
+    "index": {
+      "type": "object",
+      "required": ["nodes"],
+      "additionalProperties": false,
+      "properties": {
+        "nodes": { "type": "array", "items": { "$ref": "#/$defs/node" } }
+      }
+    },
+    "entries": { "type": "array", "items": { "$ref": "#/$defs/entry" } },
+    "sources": { "type": "array", "items": { "$ref": "#/$defs/source" } },
+    "extensions": { "type": "object" }
+  },
+
+  "$defs": {
+    "dictionaryId": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$" },
+    "entryName": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$" },
+    "path": {
+      "type": "string",
+      "description": "Slash-separated, max depth 5.",
+      "pattern": "^[a-z0-9][a-z0-9-]{0,39}(/[a-z0-9][a-z0-9-]{0,39}){0,4}$"
+    },
+
+    "auth": {
+      "type": "object",
+      "required": ["kind"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": ["none", "caller"],
+          "description": "'caller' means the executor supplies the credential; the dictionary declines to know more."
+        },
+        "hint": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Free text for the human wiring the executor. MUST NOT contain a credential."
+        },
+        "in": {
+          "enum": ["header", "query"],
+          "description": "Where the credential goes. With name and value, this is the placement the executor applies (spec section 5.4)."
+        },
+        "name": { "type": "string", "minLength": 1, "maxLength": 128, "description": "Header or query parameter name." },
+        "value": {
+          "type": "string",
+          "maxLength": 200,
+          "pattern": "^[A-Za-z0-9 ._-]*\\{\\{[A-Z][A-Z0-9_]{0,63}\\}\\}$",
+          "description": "A {{VARIABLE}} reference, optionally behind a scheme word such as 'Bearer '. Never the credential itself; the variable MUST be declared secret in defaults.variables."
+        }
+      },
+      "dependentRequired": {
+        "in": ["name", "value"],
+        "name": ["in", "value"],
+        "value": ["in", "name"]
+      }
+    },
+
+    "safeHeaders": {
+      "type": "object",
+      "description": "Non-secret headers only. Credential-bearing names (authorization, proxy-authorization, cookie, x-api-key, anything matching /api[-_]?key|secret|token|password/i) are rejected by the validator, not here: JSON Schema's ECMA-262 regex has no case-insensitive flag and a case-sensitive blocklist would be trivially bypassed. See spec section 16.2.",
+      "additionalProperties": { "type": "string", "maxLength": 512 }
+    },
+
+    "node": {
+      "type": "object",
+      "required": ["path", "title", "summary"],
+      "additionalProperties": true,
+      "properties": {
+        "path": { "$ref": "#/$defs/path" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "entryCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Entries at or below this node. Servers recompute rather than trust this."
+        },
+        "sampleQueries": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "maxItems": 5,
+          "description": "Queries known to return good results here. Handed to an agent after a miss."
+        },
+        "examples": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/entryName" },
+          "maxItems": 5
+        },
+        "children": { "type": "array", "items": { "$ref": "#/$defs/node" } },
+        "branch": { "$ref": "#/$defs/branch" },
+        "degraded": {
+          "type": "boolean",
+          "description": "Server-set: this subtree comes from a branch that failed to load."
+        },
+        "extensions": { "type": "object" }
+      }
+    },
+
+    "branch": {
+      "type": "object",
+      "description": "Delegates this subtree to another dictionary.",
+      "required": ["dictionaryId", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "dictionaryId": { "$ref": "#/$defs/dictionaryId" },
+        "url": { "type": "string", "format": "uri" },
+        "version": { "type": "integer", "minimum": 1 },
+        "etag": { "type": "string" }
+      }
+    },
+
+    "entry": {
+      "type": "object",
+      "required": ["name", "title", "summary", "path", "input", "call"],
+      "additionalProperties": true,
+      "properties": {
+        "name": { "$ref": "#/$defs/entryName" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "One plain sentence saying what question this answers. The field the budget is spent on."
+        },
+        "description": { "type": "string", "maxLength": 2000 },
+        "path": { "$ref": "#/$defs/path" },
+        "keywords": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "maxItems": 32,
+          "description": "The words a human would use, including question forms and jargon."
+        },
+        "input": {
+          "type": "object",
+          "description": "JSON Schema (2020-12 subset) with an object root.",
+          "required": ["type"],
+          "properties": { "type": { "const": "object" } }
+        },
+        "returns": { "type": "string", "maxLength": 400 },
+        "outputSchema": { "type": "object" },
+        "call": { "$ref": "#/$defs/call" },
+        "relations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/relation" },
+          "maxItems": 16
+        },
+        "risk": { "enum": ["read", "write", "destructive", "admin"], "default": "read" },
+        "stability": { "enum": ["stable", "beta", "deprecated"], "default": "stable" },
+        "deprecation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "since": { "type": "string" },
+            "replacedBy": { "$ref": "#/$defs/entryName" },
+            "note": { "type": "string", "maxLength": 300 }
+          }
+        },
+        "cost": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tier": { "enum": ["free", "standard", "expensive"] },
+            "note": { "type": "string", "maxLength": 200 }
+          }
+        },
+        "latencyHintMs": { "type": "integer", "minimum": 0 },
+        "examples": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "required": ["input"],
+            "additionalProperties": false,
+            "properties": {
+              "input": { "type": "object" },
+              "note": { "type": "string", "maxLength": 200 }
+            }
+          }
+        },
+        "aliases": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/entryName" },
+          "maxItems": 8,
+          "description": "Former names. Searchable and resolvable; see spec 13.4."
+        },
+        "extensions": { "type": "object" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "stability": { "const": "deprecated" } }, "required": ["stability"] },
+          "then": { "required": ["deprecation"] }
+        }
+      ]
+    },
+
+    "call": {
+      "type": "object",
+      "required": ["type"],
+      "oneOf": [
+        { "$ref": "#/$defs/httpCall" },
+        { "$ref": "#/$defs/mcpCall" },
+        { "$ref": "#/$defs/localCall" }
+      ]
+    },
+
+    "httpCall": {
+      "type": "object",
+      "required": ["type", "method", "urlTemplate"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "http" },
+        "method": { "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"] },
+        "baseUrl": {
+          "type": "string",
+          "pattern": "^https?://[^\\s?#]+$",
+          "description": "Omitted inherits defaults.baseUrl. Must not embed userinfo. May contain {{VARIABLE}} references."
+        },
+        "urlTemplate": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "Path with {param} placeholders naming declared input properties."
+        },
+        "query": { "type": "object", "additionalProperties": { "type": "string" } },
+        "headers": { "$ref": "#/$defs/safeHeaders" },
+        "bodyTemplate": {
+          "description": "null means: send the input object verbatim as the body.",
+          "type": ["object", "array", "string", "null"]
+        },
+        "auth": { "$ref": "#/$defs/auth" },
+        "timeoutHintMs": { "type": "integer", "minimum": 1, "maximum": 300000 }
+      }
+    },
+
+    "mcpCall": {
+      "type": "object",
+      "required": ["type", "server", "tool"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "mcp" },
+        "server": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "tool": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "auth": { "$ref": "#/$defs/auth" },
+        "timeoutHintMs": { "type": "integer", "minimum": 1, "maximum": 300000 }
+      }
+    },
+
+    "localCall": {
+      "type": "object",
+      "required": ["type", "handler"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "local" },
+        "handler": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Opaque id the consumer resolves in-process."
+        },
+        "timeoutHintMs": { "type": "integer", "minimum": 1, "maximum": 300000 }
+      }
+    },
+
+    "relation": {
+      "type": "object",
+      "required": ["type", "target", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "alternative",
+            "narrower",
+            "broader",
+            "prerequisite",
+            "enables",
+            "pairs_with",
+            "successor",
+            "predecessor",
+            "same_data_other_source"
+          ]
+        },
+        "target": {
+          "type": "string",
+          "pattern": "^([a-z0-9][a-z0-9-]{0,63}#)?[A-Za-z][A-Za-z0-9_-]{0,63}$",
+          "description": "An entry name, or '<dictionaryId>#<name>' for a cross-dictionary reference."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Why the agent might want this instead of, or next to, the entry it hangs off. Rendered verbatim."
+        },
+        "weight": { "type": "number", "minimum": 0, "maximum": 1, "default": 1 }
+      }
+    },
+
+    "source": {
+      "type": "object",
+      "required": ["type", "url"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "enum": ["openapi", "overlay", "dictionary", "registry", "manual"] },
+        "url": { "type": "string" },
+        "fetchedAt": { "type": "string", "format": "date-time" },
+        "etag": { "type": "string" },
+        "entryCount": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

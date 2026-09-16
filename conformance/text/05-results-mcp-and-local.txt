@@ -1,0 +1,19 @@
+DICTIONARY vectors v4 — 2 results for "probe echo debug"
+
+1. echo_request — Echo a request back
+   Return the request exactly as the service received it, for debugging a caller.
+   path: diagnostics
+   input: text (string, required) — Anything; it comes back unchanged — quotes, "nested" ones included.
+   call: local handler diagnostics.echo
+   cost: free
+
+2. probe_upstream — Probe the upstream feed
+   Report whether the price feed is live and how far behind it is.
+   path: diagnostics/probe
+   input: (takes no input)
+   returns: Liveness plus the age in seconds of the newest price.
+   call: MCP market-ops :: probe_feed
+   cost: free
+
+To use one, call it with the input shown. To see the full definition of any of
+these, search again with its exact name.

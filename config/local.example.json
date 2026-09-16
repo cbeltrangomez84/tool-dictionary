@@ -1,0 +1,14 @@
+{
+  "host": "127.0.0.1",
+  "port": 8080,
+  "logger": false,
+  "adminTokens": ["${TD_ADMIN_TOKEN}"],
+  "dictionaries": [
+    {
+      "id": "crypto-data",
+      "source": { "kind": "file", "location": "../spec/examples/crypto-data.dictionary.json" },
+      "readTokens": [],
+      "threshold": { "minScore": 1.0, "relativeFloor": 0.15 }
+    }
+  ]
+}

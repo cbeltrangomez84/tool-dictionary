@@ -1,0 +1,294 @@
+{
+  "toolDictionaryOverlay": "0.1",
+  "dictionaryId": "pool-scout",
+  "title": "Pool Scout — liquidity pools",
+  "summary": "Liquidity-pool due diligence for one (chain, pool): how deep it is, whether the liquidity can leave, who trades it, and what a provider earns.",
+  "synonyms": {
+    "liquidity": [
+      "lp",
+      "tvl",
+      "depth"
+    ],
+    "volume": [
+      "vol",
+      "turnover"
+    ],
+    "apr": [
+      "apy",
+      "yield",
+      "returns"
+    ],
+    "providers": [
+      "lps",
+      "farmers"
+    ],
+    "swaps": [
+      "trades",
+      "transactions",
+      "txs"
+    ],
+    "locked": [
+      "locker",
+      "vested"
+    ]
+  },
+  "addIndex": [
+    {
+      "path": "pools/status",
+      "title": "Status",
+      "summary": "Whether the pool data surface itself is answering.",
+      "sampleQueries": [
+        "is pool scout up"
+      ]
+    }
+  ],
+  "index": {
+    "pools": {
+      "summary": "One pool, one question at a time. Every tool takes the same (chain, pool) pair except search, which is how you find the pool in the first place.",
+      "sampleQueries": [
+        "find the main pool for a token",
+        "can the liquidity be pulled",
+        "how much volume did the pool do today",
+        "what would i earn providing liquidity"
+      ]
+    }
+  },
+  "entries": {
+    "*": {
+      "keywords": {
+        "remove": [
+          "pools",
+          "pool"
+        ]
+      }
+    },
+    "get_pools_search": {
+      "title": "Find a pool",
+      "summary": "Find the pools a token trades in, most liquid first. Start here when you have a symbol or token address and no pool address yet.",
+      "keywords": {
+        "add": [
+          "which pool",
+          "where does it trade",
+          "main pool",
+          "pair",
+          "lookup",
+          "by symbol",
+          "by token"
+        ]
+      },
+      "relations": {
+        "add": [
+          {
+            "type": "enables",
+            "target": "get_pools",
+            "reason": "once you have the pool address, this is the overview"
+          }
+        ]
+      },
+      "examples": [
+        {
+          "input": {
+            "q": "SOL",
+            "chain": "solana",
+            "limit": 3
+          },
+          "note": "the three deepest SOL pools on Solana"
+        }
+      ]
+    },
+    "get_pools": {
+      "title": "Pool overview",
+      "summary": "Venue, pair, fee tier, age, TVL and the price the reserves imply. The one call that identifies a pool.",
+      "keywords": {
+        "add": [
+          "what is this pool",
+          "dex",
+          "venue",
+          "fee tier",
+          "age",
+          "created",
+          "price"
+        ]
+      },
+      "relations": {
+        "add": [
+          {
+            "type": "narrower",
+            "target": "get_pools_liquidity",
+            "reason": "just the depth, plus whether the LP is locked or burned"
+          },
+          {
+            "type": "narrower",
+            "target": "get_pools_volume",
+            "reason": "just the activity over a window"
+          }
+        ]
+      },
+      "examples": [
+        {
+          "input": {
+            "chain": "solana",
+            "pool": "7NhFfdRq2M9aVzZpN4xKpT7YQ2cEUzdmJ9bH6sWkLPaB"
+          },
+          "note": "a deep, long-lived pool — useful to see a healthy result"
+        }
+      ]
+    },
+    "get_pools_liquidity": {
+      "title": "Liquidity and lock status",
+      "summary": "Reserves and TVL, plus how much of the LP is locked or burned — the figure that says whether the liquidity can be pulled.",
+      "keywords": {
+        "add": [
+          "rug",
+          "rugpull",
+          "can liquidity be pulled",
+          "lp locked",
+          "lp burned",
+          "locked",
+          "burned",
+          "reserves",
+          "tvl",
+          "depth"
+        ]
+      },
+      "relations": {
+        "add": [
+          {
+            "type": "pairs_with",
+            "target": "get_pools_providers",
+            "reason": "an unlocked LP is only a risk if few wallets hold it",
+            "weight": 0.9
+          },
+          {
+            "type": "broader",
+            "target": "get_pools",
+            "reason": "the same TVL plus venue, pair and price"
+          }
+        ]
+      }
+    },
+    "get_pools_volume": {
+      "title": "Volume and fees",
+      "summary": "Swap volume, fees earned and trade counts over 1h, 24h, 7d or 30d, with buys and sells split.",
+      "keywords": {
+        "add": [
+          "24h",
+          "today",
+          "activity",
+          "buy pressure",
+          "sell pressure",
+          "how active",
+          "fees earned",
+          "trade count"
+        ]
+      },
+      "relations": {
+        "add": [
+          {
+            "type": "narrower",
+            "target": "get_pools_swaps",
+            "reason": "the individual trades behind the totals"
+          },
+          {
+            "type": "pairs_with",
+            "target": "get_pools_apr",
+            "reason": "fees are what the yield is computed from",
+            "weight": 0.7
+          }
+        ]
+      }
+    },
+    "get_pools_swaps": {
+      "title": "Recent swaps",
+      "summary": "The latest trades in a pool, newest first, with size, price and the wallet behind each one.",
+      "keywords": {
+        "add": [
+          "latest trades",
+          "who is buying",
+          "who is trading",
+          "who is selling",
+          "whale buys",
+          "large trades",
+          "tape",
+          "history"
+        ]
+      },
+      "relations": {
+        "add": [
+          {
+            "type": "broader",
+            "target": "get_pools_volume",
+            "reason": "the totals these trades add up to"
+          }
+        ]
+      }
+    },
+    "get_pools_providers": {
+      "title": "Liquidity providers",
+      "summary": "Who provides the liquidity, largest first, and how concentrated it is in the top ten.",
+      "keywords": {
+        "add": [
+          "who owns the lp",
+          "concentration",
+          "top 10",
+          "whales",
+          "lp holders",
+          "farmers"
+        ]
+      },
+      "relations": {
+        "add": [
+          {
+            "type": "pairs_with",
+            "target": "get_pools_liquidity",
+            "reason": "an unlocked LP is only a risk if few wallets hold it",
+            "weight": 0.9
+          }
+        ]
+      }
+    },
+    "get_pools_apr": {
+      "title": "Yield for providers",
+      "summary": "Fee and incentive APR a liquidity provider would earn, annualised from the last seven days. An estimate, not a promise.",
+      "keywords": {
+        "add": [
+          "apy",
+          "yield",
+          "earn",
+          "providing liquidity",
+          "what would i earn providing liquidity",
+          "farming",
+          "returns",
+          "what would i make",
+          "incentives",
+          "rewards"
+        ]
+      },
+      "relations": {
+        "add": [
+          {
+            "type": "pairs_with",
+            "target": "get_pools_volume",
+            "reason": "fees are what the yield is computed from",
+            "weight": 0.7
+          }
+        ]
+      }
+    },
+    "get_pools_health": {
+      "title": "Health check",
+      "summary": "Whether the pool data surface and its indexer are answering. Public: it needs no key.",
+      "path": "pools/status",
+      "keywords": {
+        "add": [
+          "health",
+          "status",
+          "up",
+          "down",
+          "is the service up"
+        ]
+      },
+      "risk": "read"
+    }
+  }
+}

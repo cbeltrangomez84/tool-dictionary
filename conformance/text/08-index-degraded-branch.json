@@ -1,0 +1,53 @@
+{
+  "case": "08-index-degraded-branch",
+  "covers": "A branch that failed to load renders as [unavailable] instead of disappearing.",
+  "dictionary": "crypto-data",
+  "request": null,
+  "response": {
+    "kind": "index",
+    "dictionary": {
+      "id": "crypto-data",
+      "version": 47,
+      "etag": "\"sha256:0000000000000000000000000000000000000000000000000000000000000000\""
+    },
+    "query": {
+      "text": ""
+    },
+    "reason": "empty_query",
+    "notice": "One branch is unavailable; its tools are not searchable right now.",
+    "suggestions": [],
+    "index": {
+      "nodes": [
+        {
+          "path": "tokens",
+          "title": "Tokens",
+          "summary": "Everything keyed by a token address.",
+          "entryCount": 6,
+          "sampleQueries": [
+            "price of a token"
+          ],
+          "children": [
+            {
+              "path": "tokens/holders",
+              "title": "Holders",
+              "summary": "Who holds a token and how much.",
+              "entryCount": 3
+            }
+          ]
+        },
+        {
+          "path": "nfts",
+          "title": "NFTs",
+          "summary": "Collections, floors and owners.",
+          "entryCount": 0,
+          "degraded": true
+        }
+      ]
+    },
+    "budget": {
+      "maxBytes": 16000,
+      "usedBytes": 0,
+      "truncated": false
+    }
+  }
+}

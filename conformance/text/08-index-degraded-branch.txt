@@ -1,0 +1,10 @@
+DICTIONARY crypto-data v47 — index
+NOTE: One branch is unavailable; its tools are not searchable right now.
+
+CATEGORIES
+tokens (6) — Tokens: Everything keyed by a token address.
+   try: "price of a token"
+   tokens/holders (3) — Holders: Who holds a token and how much.
+nfts (0) [unavailable] — NFTs: Collections, floors and owners.
+
+Search again with one of the "try" queries, or with a path to narrow to one branch.

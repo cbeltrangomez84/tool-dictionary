@@ -1,0 +1,166 @@
+{
+  "toolDictionary": "0.1",
+  "id": "city-weather",
+  "title": "City weather",
+  "summary": "Current conditions and short forecasts for any city.",
+  "version": 1,
+  "generatedAt": "2026-09-16T00:00:00.000Z",
+  "defaults": {
+    "baseUrl": "https://api.weather.example",
+    "auth": {
+      "kind": "caller",
+      "in": "header",
+      "name": "x-api-key",
+      "value": "{{WEATHER_API_KEY}}"
+    },
+    "variables": {
+      "WEATHER_API_KEY": {
+        "secret": true,
+        "description": "Issued in the console."
+      }
+    }
+  },
+  "synonyms": {
+    "forecast": [
+      "outlook",
+      "prediction"
+    ]
+  },
+  "index": {
+    "nodes": [
+      {
+        "path": "weather",
+        "title": "Weather",
+        "summary": "What it is like outside, now and soon.",
+        "sampleQueries": [
+          "is it raining in Lisbon",
+          "will it snow this weekend"
+        ]
+      }
+    ]
+  },
+  "entries": [
+    {
+      "name": "current_conditions",
+      "title": "Current conditions",
+      "summary": "Temperature, sky and wind in a city right now.",
+      "path": "weather",
+      "keywords": [
+        "now",
+        "right now",
+        "temperature",
+        "is it raining",
+        "how hot",
+        "how cold"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string",
+            "description": "City name, optionally with country."
+          }
+        },
+        "required": [
+          "city"
+        ]
+      },
+      "returns": "An object with tempC, sky, windKph and observedAt.",
+      "call": {
+        "type": "http",
+        "method": "GET",
+        "urlTemplate": "/v1/current",
+        "query": {
+          "city": "{city}"
+        }
+      },
+      "relations": [
+        {
+          "type": "pairs_with",
+          "target": "forecast_daily",
+          "reason": "what comes next, once you know what it is like now",
+          "weight": 0.6
+        }
+      ]
+    },
+    {
+      "name": "forecast_daily",
+      "title": "Daily forecast",
+      "summary": "High, low and chance of rain per day for up to ten days.",
+      "path": "weather",
+      "keywords": [
+        "tomorrow",
+        "this weekend",
+        "next week",
+        "will it rain",
+        "will it snow"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string"
+          },
+          "days": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 3
+          }
+        },
+        "required": [
+          "city"
+        ]
+      },
+      "returns": "A list of days, each with date, highC, lowC and rainChancePct.",
+      "call": {
+        "type": "http",
+        "method": "GET",
+        "urlTemplate": "/v1/forecast/daily",
+        "query": {
+          "city": "{city}",
+          "days": "{days}"
+        }
+      },
+      "relations": [
+        {
+          "type": "narrower",
+          "target": "forecast_hourly",
+          "reason": "the same window, hour by hour"
+        }
+      ]
+    },
+    {
+      "name": "forecast_hourly",
+      "title": "Hourly forecast",
+      "summary": "Conditions hour by hour for the next 48 hours.",
+      "path": "weather",
+      "keywords": [
+        "tonight",
+        "this afternoon",
+        "at 6pm",
+        "hour by hour"
+      ],
+      "input": {
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "city"
+        ]
+      },
+      "returns": "A list of hours, each with time, tempC, sky and rainChancePct.",
+      "call": {
+        "type": "http",
+        "method": "GET",
+        "urlTemplate": "/v1/forecast/hourly",
+        "query": {
+          "city": "{city}"
+        }
+      }
+    }
+  ]
+}

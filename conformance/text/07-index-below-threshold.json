@@ -1,0 +1,121 @@
+{
+  "case": "07-index-below-threshold",
+  "covers": "A miss returns the index with a DID YOU MEAN section.",
+  "dictionary": "crypto-data",
+  "request": {
+    "query": "holdrs of a tokn"
+  },
+  "response": {
+    "kind": "index",
+    "dictionary": {
+      "id": "crypto-data",
+      "version": 47,
+      "etag": "\"sha256:6ce993d8c9d19fcbc3baa9ba63c096c26fb183bcd057703ed41dbb126d9b4d8b\""
+    },
+    "query": {
+      "text": "holdrs of a tokn"
+    },
+    "reason": "below_threshold",
+    "notice": "Nothing matched \"holdrs of a tokn\" well enough. See the suggestions, or search with one of the \"try\" queries below.",
+    "suggestions": [
+      {
+        "name": "holders_count",
+        "title": "Token holder count",
+        "why": "did you mean \"holder\"?"
+      }
+    ],
+    "index": {
+      "nodes": [
+        {
+          "path": "tokens",
+          "title": "Tokens",
+          "summary": "Everything about one token: price, supply, holders and trades.",
+          "entryCount": 6,
+          "sampleQueries": [
+            "token price",
+            "who holds this token",
+            "token trade history"
+          ],
+          "children": [
+            {
+              "path": "tokens/holders",
+              "title": "Holders",
+              "summary": "Who owns a token and in what proportion.",
+              "entryCount": 3,
+              "sampleQueries": [
+                "how many holders",
+                "holder distribution",
+                "top holders"
+              ],
+              "examples": [
+                "holders_count",
+                "holders_percentage",
+                "holders_top"
+              ]
+            },
+            {
+              "path": "tokens/price",
+              "title": "Price and market cap",
+              "summary": "Current and historical price, market cap and supply.",
+              "entryCount": 2,
+              "sampleQueries": [
+                "price of a token",
+                "market cap",
+                "price 24h ago"
+              ],
+              "examples": [
+                "token_price",
+                "token_market_cap"
+              ]
+            },
+            {
+              "path": "tokens/lookup",
+              "title": "Lookup",
+              "summary": "Turn a ticker or a name into the contract address everything else needs.",
+              "entryCount": 1,
+              "sampleQueries": [
+                "find token by symbol",
+                "what is the contract address"
+              ],
+              "examples": [
+                "token_resolve_symbol"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "wallets",
+          "title": "Wallets",
+          "summary": "What a wallet holds, what it traded and what it made or lost.",
+          "entryCount": 2,
+          "sampleQueries": [
+            "wallet balance",
+            "wallet pnl",
+            "wallet trade history"
+          ],
+          "children": [
+            {
+              "path": "wallets/pnl",
+              "title": "Profit and loss",
+              "summary": "Realized and unrealized profit for a wallet, overall or per token.",
+              "entryCount": 2,
+              "sampleQueries": [
+                "how much did this wallet make",
+                "pnl per token"
+              ],
+              "examples": [
+                "wallet_pnl",
+                "wallet_pnl_by_token"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "budget": {
+      "maxBytes": 12000,
+      "usedBytes": 1956,
+      "truncated": false
+    }
+  }
+}

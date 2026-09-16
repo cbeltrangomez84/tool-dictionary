@@ -1,0 +1,92 @@
+{
+  "case": "05-results-mcp-and-local",
+  "covers": "MCP and local call rendering, and a tool that takes no input.",
+  "dictionary": "vectors",
+  "request": {
+    "query": "probe echo debug"
+  },
+  "response": {
+    "kind": "results",
+    "dictionary": {
+      "id": "vectors",
+      "version": 4,
+      "etag": "\"sha256:7de983a500f62fdc9b10f07b88b7e32d62850fc7748948fc3df7a03494306650\""
+    },
+    "query": {
+      "text": "probe echo debug"
+    },
+    "results": [
+      {
+        "name": "echo_request",
+        "title": "Echo a request back",
+        "detail": "full",
+        "score": 11.669,
+        "matchedOn": [
+          "keywords",
+          "name",
+          "title"
+        ],
+        "summary": "Return the request exactly as the service received it, for debugging a caller.",
+        "path": "diagnostics",
+        "input": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "description": "Anything; it comes back unchanged — quotes, \"nested\" ones included."
+            }
+          },
+          "required": [
+            "text"
+          ]
+        },
+        "call": {
+          "type": "local",
+          "handler": "diagnostics.echo"
+        },
+        "risk": "read",
+        "stability": "stable",
+        "cost": {
+          "tier": "free"
+        }
+      },
+      {
+        "name": "probe_upstream",
+        "title": "Probe the upstream feed",
+        "detail": "full",
+        "score": 7.075,
+        "matchedOn": [
+          "keywords",
+          "name",
+          "title",
+          "path"
+        ],
+        "summary": "Report whether the price feed is live and how far behind it is.",
+        "path": "diagnostics/probe",
+        "input": {
+          "type": "object",
+          "properties": {}
+        },
+        "returns": "Liveness plus the age in seconds of the newest price.",
+        "call": {
+          "type": "mcp",
+          "server": "market-ops",
+          "tool": "probe_feed"
+        },
+        "risk": "read",
+        "stability": "stable",
+        "cost": {
+          "tier": "free"
+        }
+      }
+    ],
+    "related": [],
+    "budget": {
+      "maxBytes": 12000,
+      "usedBytes": 1293,
+      "truncated": false
+    },
+    "notice": null,
+    "nextCursor": null
+  }
+}

@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+.env
+*.log
+# Local service configs carry token references and machine paths.
+config/*.json
+!config/local.example.json

@@ -1,0 +1,142 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Sample Market API",
+    "description": "Prices, holders and alerts for tokens. Everything is read-only unless stated.",
+    "version": "2.4.0"
+  },
+  "servers": [
+    { "url": "https://{host}/v1", "variables": { "host": { "default": "api.example.com" } } }
+  ],
+  "tags": [
+    { "name": "tokens", "description": "Token prices and market data." },
+    { "name": "wallets", "description": "Wallet holdings and history." }
+  ],
+  "security": [{ "apiKey": [] }],
+  "components": {
+    "securitySchemes": {
+      "apiKey": { "type": "apiKey", "in": "header", "name": "X-Api-Key", "description": "Issued per tenant in the sample dashboard." }
+    },
+    "parameters": {
+      "Chain": {
+        "name": "chain",
+        "in": "query",
+        "required": true,
+        "description": "Chain slug, e.g. solana.",
+        "schema": { "type": "string", "enum": ["solana", "ethereum"] }
+      }
+    },
+    "schemas": {
+      "AlertBody": {
+        "type": "object",
+        "required": ["address", "threshold"],
+        "properties": {
+          "address": { "type": "string", "description": "Token address to watch." },
+          "threshold": { "type": "number", "description": "Price that triggers the alert." },
+          "note": { "type": "string" }
+        }
+      },
+      "Recursive": {
+        "type": "object",
+        "properties": { "self": { "$ref": "#/components/schemas/Recursive" } }
+      }
+    }
+  },
+  "paths": {
+    "/tokens/{address}/price": {
+      "parameters": [
+        { "name": "address", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Token mint address." }
+      ],
+      "get": {
+        "operationId": "token_price",
+        "summary": "Current price of a token",
+        "description": "Returns the latest traded price in USD. Updated every few seconds.",
+        "tags": ["tokens"],
+        "parameters": [
+          { "$ref": "#/components/parameters/Chain" },
+          { "name": "X-Api-Key", "in": "header", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "The latest price in USD with the timestamp of the trade it came from." }
+        }
+      }
+    },
+    "/tokens/{address}/holders": {
+      "get": {
+        "operationId": "holders_count",
+        "summary": "How many wallets hold a token",
+        "tags": ["tokens"],
+        "parameters": [{ "$ref": "#/components/parameters/Chain" }],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/tokens/{address}/holders/legacy": {
+      "get": {
+        "operationId": "holders_count_v0",
+        "summary": "How many wallets hold a token (legacy)",
+        "tags": ["tokens"],
+        "deprecated": true,
+        "security": [],
+        "x-replaced-by": "holders_count",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/tokens/trending": {
+      "get": {
+        "summary": "Tokens trending right now",
+        "tags": ["tokens"],
+        "deprecated": true,
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/wallets/{wallet}/holdings": {
+      "get": {
+        "operationId": "wallet holdings!",
+        "summary": "What a wallet holds",
+        "x-category": "wallets/positions",
+        "x-keywords": ["portfolio"],
+        "responses": { "200": { "description": "Every position the wallet holds, with USD value." } }
+      }
+    },
+    "/wallets/{wallet}/pnl": {
+      "get": {
+        "summary": "Profit and loss for a wallet",
+        "x-category": "wallets/positions",
+        "responses": { "200": { "description": "Realized and unrealized PnL." } }
+      }
+    },
+    "/alerts": {
+      "post": {
+        "operationId": "create_alert",
+        "summary": "Create a price alert",
+        "tags": ["alerts"],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AlertBody" } } }
+        },
+        "responses": { "201": { "description": "The alert that was created." } }
+      },
+      "delete": {
+        "operationId": "create_alert",
+        "summary": "Delete every alert",
+        "tags": ["alerts"],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/alerts/{id}/note": {
+      "put": {
+        "operationId": "set_alert_note",
+        "summary": "Replace the note on an alert",
+        "tags": ["alerts"],
+        "requestBody": {
+          "required": true,
+          "content": { "text/plain": { "schema": { "type": "string" } } }
+        },
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/internal/debug": {
+      "get": { "operationId": "debug_dump", "summary": "Internal debug dump", "x-hidden": true, "responses": { "200": { "description": "OK" } } }
+    }
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "case": "06-index-empty-query",
+  "covers": "Empty query returns the index: NOTE, CATEGORIES, nesting, try/e.g. lines.",
+  "dictionary": "vectors",
+  "request": {
+    "query": ""
+  },
+  "response": {
+    "kind": "index",
+    "dictionary": {
+      "id": "vectors",
+      "version": 4,
+      "etag": "\"sha256:7de983a500f62fdc9b10f07b88b7e32d62850fc7748948fc3df7a03494306650\""
+    },
+    "query": {
+      "text": ""
+    },
+    "reason": "empty_query",
+    "notice": "Empty query. This is the catalogue of what this dictionary covers; search with one of the \"try\" queries.",
+    "suggestions": [],
+    "index": {
+      "nodes": [
+        {
+          "path": "alerts",
+          "title": "Price alerts",
+          "summary": "Create, list and delete alerts that fire when a token crosses a price.",
+          "entryCount": 3,
+          "sampleQueries": [
+            "tell me when a token goes above a price",
+            "delete an alert"
+          ],
+          "examples": [
+            "alert_create",
+            "alert_delete"
+          ]
+        },
+        {
+          "path": "diagnostics",
+          "title": "Diagnostics",
+          "summary": "Tools that report on the service itself rather than on market data.",
+          "entryCount": 2,
+          "sampleQueries": [
+            "is the service healthy"
+          ],
+          "children": [
+            {
+              "path": "diagnostics/probe",
+              "title": "Probes",
+              "summary": "Liveness and version checks reached over MCP.",
+              "entryCount": 1,
+              "sampleQueries": [
+                "probe the upstream"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "budget": {
+      "maxBytes": 12000,
+      "usedBytes": 1018,
+      "truncated": false
+    }
+  }
+}

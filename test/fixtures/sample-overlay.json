@@ -1,0 +1,28 @@
+{
+  "toolDictionaryOverlay": "0.1",
+  "dictionaryId": "sample",
+  "summary": "Prices, holders, wallet positions and price alerts for tokens on Solana and Ethereum.",
+  "synonyms": { "holders": ["holder count", "how many wallets"] },
+  "entries": {
+    "holders_count": {
+      "summary": "How many distinct wallets hold this token right now.",
+      "keywords": { "add": ["holder count", "distribution"], "remove": ["chain"] },
+      "aliases": { "add": ["token_holders"] },
+      "relations": {
+        "add": [{ "type": "alternative", "target": "token_price", "reason": "the other headline number people ask for" }]
+      }
+    },
+    "get_tokens_trending": {
+      "relations": { "add": [{ "type": "successor", "target": "token_price", "reason": "rank by price change instead" }] }
+    },
+    "renamed_upstream": { "summary": "This entry no longer exists." }
+  },
+  "index": {
+    "tokens": {
+      "summary": "Everything keyed by a token address: price, holders, trending.",
+      "sampleQueries": { "add": ["price of a token"], "remove": ["how many wallets hold a token"] }
+    },
+    "nowhere": { "summary": "No such node." }
+  },
+  "hide": ["create_alert_2", "never_existed"]
+}

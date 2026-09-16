@@ -1,0 +1,13 @@
+DICTIONARY vectors v4 — index
+NOTE: Empty query. This is the catalogue of what this dictionary covers; search with one of the "try" queries.
+
+CATEGORIES
+alerts (3) — Price alerts: Create, list and delete alerts that fire when a token crosses a price.
+   try: "tell me when a token goes above a price", "delete an alert"
+   e.g. alert_create, alert_delete
+diagnostics (2) — Diagnostics: Tools that report on the service itself rather than on market data.
+   try: "is the service healthy"
+   diagnostics/probe (1) — Probes: Liveness and version checks reached over MCP.
+      try: "probe the upstream"
+
+Search again with one of the "try" queries, or with a path to narrow to one branch.

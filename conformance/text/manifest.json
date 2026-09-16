@@ -1,0 +1,88 @@
+{
+  "toolDictionary": "0.1",
+  "section": "11.4",
+  "cases": [
+    {
+      "slug": "01-results-auto",
+      "covers": "The common case: auto detail, rank 1-3 at full, a related section, no notice.",
+      "dictionary": "crypto-data",
+      "request": {
+        "query": "how many people hold this token"
+      },
+      "kind": "results",
+      "bytes": 3858
+    },
+    {
+      "slug": "02-results-degraded",
+      "covers": "A budget too small for the whole page: NOTE line, reduced detail, MORE cursor line.",
+      "dictionary": "crypto-data",
+      "request": {
+        "query": "holders",
+        "maxBytes": 1400
+      },
+      "kind": "results",
+      "bytes": 728
+    },
+    {
+      "slug": "03-results-single-summary",
+      "covers": "Singular \"1 result\", explicit summary detail, related suppressed.",
+      "dictionary": "crypto-data",
+      "request": {
+        "query": "market cap",
+        "limit": 1,
+        "detail": "summary",
+        "includeRelated": false
+      },
+      "kind": "results",
+      "bytes": 427
+    },
+    {
+      "slug": "04-results-risk-and-deprecation",
+      "covers": "BETA, DEPRECATED and RISK lines; enum/default/required facets; examples with and without a note.",
+      "dictionary": "vectors",
+      "request": {
+        "query": "alert"
+      },
+      "kind": "results",
+      "bytes": 2179
+    },
+    {
+      "slug": "05-results-mcp-and-local",
+      "covers": "MCP and local call rendering, and a tool that takes no input.",
+      "dictionary": "vectors",
+      "request": {
+        "query": "probe echo debug"
+      },
+      "kind": "results",
+      "bytes": 771
+    },
+    {
+      "slug": "06-index-empty-query",
+      "covers": "Empty query returns the index: NOTE, CATEGORIES, nesting, try/e.g. lines.",
+      "dictionary": "vectors",
+      "request": {
+        "query": ""
+      },
+      "kind": "index",
+      "bytes": 692
+    },
+    {
+      "slug": "07-index-below-threshold",
+      "covers": "A miss returns the index with a DID YOU MEAN section.",
+      "dictionary": "crypto-data",
+      "request": {
+        "query": "holdrs of a tokn"
+      },
+      "kind": "index",
+      "bytes": 1457
+    },
+    {
+      "slug": "08-index-degraded-branch",
+      "covers": "A branch that failed to load renders as [unavailable] instead of disappearing.",
+      "dictionary": "crypto-data",
+      "request": null,
+      "kind": "index",
+      "bytes": 425
+    }
+  ]
+}

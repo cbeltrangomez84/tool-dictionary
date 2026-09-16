@@ -1,0 +1,369 @@
+{
+  "case": "01-results-auto",
+  "covers": "The common case: auto detail, rank 1-3 at full, a related section, no notice.",
+  "dictionary": "crypto-data",
+  "request": {
+    "query": "how many people hold this token"
+  },
+  "response": {
+    "kind": "results",
+    "dictionary": {
+      "id": "crypto-data",
+      "version": 47,
+      "etag": "\"sha256:6ce993d8c9d19fcbc3baa9ba63c096c26fb183bcd057703ed41dbb126d9b4d8b\""
+    },
+    "query": {
+      "text": "how many people hold this token"
+    },
+    "results": [
+      {
+        "name": "holders_count",
+        "title": "Token holder count",
+        "detail": "full",
+        "score": 2.733,
+        "matchedOn": [
+          "description",
+          "title",
+          "summary",
+          "path",
+          "inputDescriptions"
+        ],
+        "summary": "Number of distinct wallets currently holding a token.",
+        "path": "tokens/holders",
+        "relations": [
+          {
+            "type": "alternative",
+            "target": "holders_percentage",
+            "reason": "share of supply per holder, not a count"
+          },
+          {
+            "type": "pairs_with",
+            "target": "holders_top",
+            "reason": "who the largest holders actually are"
+          },
+          {
+            "type": "prerequisite",
+            "target": "token_resolve_symbol",
+            "reason": "if you only have a ticker, not an address"
+          }
+        ],
+        "description": "Returns the count of unique addresses with a non-zero balance of the given token at the latest indexed block. Counts addresses, not people: one person may hold from several wallets, and contract, burn and exchange addresses are included unless you exclude them.",
+        "input": {
+          "type": "object",
+          "properties": {
+            "address": {
+              "type": "string",
+              "description": "Token contract address or Solana mint."
+            },
+            "chain": {
+              "type": "string",
+              "enum": [
+                "solana",
+                "ethereum",
+                "base",
+                "bsc"
+              ],
+              "default": "solana",
+              "description": "Which chain the token lives on."
+            },
+            "excludeContracts": {
+              "type": "boolean",
+              "default": false,
+              "description": "Leave out contract and burn addresses."
+            }
+          },
+          "required": [
+            "address"
+          ]
+        },
+        "returns": "An integer count and the block height it was measured at.",
+        "call": {
+          "type": "http",
+          "method": "GET",
+          "urlTemplate": "/v1/tokens/{address}/holders/count",
+          "query": {
+            "chain": "{chain}",
+            "exclude_contracts": "{excludeContracts}"
+          },
+          "baseUrl": "https://data.example.com",
+          "auth": {
+            "kind": "caller",
+            "hint": "x-api-key header, injected by your own backend",
+            "in": "header",
+            "name": "x-api-key",
+            "value": "{{CRYPTO_DATA_API_KEY}}"
+          },
+          "timeoutHintMs": 3000
+        },
+        "risk": "read",
+        "stability": "stable",
+        "cost": {
+          "tier": "standard"
+        },
+        "examples": [
+          {
+            "input": {
+              "address": "So11111111111111111111111111111111111111112"
+            },
+            "note": "wSOL on Solana"
+          }
+        ]
+      },
+      {
+        "name": "token_resolve_symbol",
+        "title": "Find a token by symbol or name",
+        "detail": "full",
+        "score": 1.067,
+        "matchedOn": [
+          "keywords",
+          "name",
+          "title",
+          "path",
+          "description"
+        ],
+        "summary": "Turn a ticker like BONK into the contract address every other tool needs.",
+        "path": "tokens/lookup",
+        "relations": [
+          {
+            "type": "enables",
+            "target": "holders_count",
+            "reason": "if you only have a ticker, not an address"
+          },
+          {
+            "type": "enables",
+            "target": "token_price",
+            "reason": "if you only have a ticker, not an address"
+          }
+        ],
+        "description": "Searches known tokens by symbol or name and returns candidates ranked by liquidity. Symbols are not unique: always check the returned market cap and liquidity before using a result.",
+        "input": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Ticker or name, e.g. 'BONK'."
+            },
+            "chain": {
+              "type": "string",
+              "enum": [
+                "solana",
+                "ethereum",
+                "base",
+                "bsc"
+              ]
+            }
+          },
+          "required": [
+            "query"
+          ]
+        },
+        "returns": "Up to 10 candidate tokens with address, chain, liquidity and market cap.",
+        "call": {
+          "type": "http",
+          "method": "GET",
+          "urlTemplate": "/v1/tokens/search",
+          "query": {
+            "q": "{query}",
+            "chain": "{chain}"
+          },
+          "baseUrl": "https://data.example.com",
+          "auth": {
+            "kind": "caller",
+            "hint": "x-api-key header, injected by your own backend",
+            "in": "header",
+            "name": "x-api-key",
+            "value": "{{CRYPTO_DATA_API_KEY}}"
+          },
+          "timeoutHintMs": 3000
+        },
+        "risk": "read",
+        "stability": "stable",
+        "cost": {
+          "tier": "free"
+        }
+      },
+      {
+        "name": "wallet_pnl_by_token",
+        "title": "Wallet profit and loss per token",
+        "detail": "full",
+        "score": 1.001,
+        "matchedOn": [
+          "keywords",
+          "name",
+          "title",
+          "summary"
+        ],
+        "summary": "Profit and loss for a wallet broken down by each token it traded.",
+        "path": "wallets/pnl",
+        "relations": [
+          {
+            "type": "broader",
+            "target": "wallet_pnl",
+            "reason": "the same figure split per token, if you need to know which trade won"
+          }
+        ],
+        "input": {
+          "type": "object",
+          "properties": {
+            "wallet": {
+              "type": "string",
+              "description": "Wallet address."
+            },
+            "chain": {
+              "type": "string",
+              "enum": [
+                "solana",
+                "ethereum",
+                "base",
+                "bsc"
+              ],
+              "default": "solana"
+            },
+            "limit": {
+              "type": "integer",
+              "default": 25,
+              "maximum": 200
+            }
+          },
+          "required": [
+            "wallet"
+          ]
+        },
+        "returns": "One row per token with realized, unrealized and total USD profit.",
+        "call": {
+          "type": "http",
+          "method": "GET",
+          "urlTemplate": "/v1/wallets/{wallet}/pnl/by-token",
+          "query": {
+            "chain": "{chain}",
+            "limit": "{limit}"
+          },
+          "baseUrl": "https://data.example.com",
+          "auth": {
+            "kind": "caller",
+            "hint": "x-api-key header, injected by your own backend",
+            "in": "header",
+            "name": "x-api-key",
+            "value": "{{CRYPTO_DATA_API_KEY}}"
+          },
+          "timeoutHintMs": 3000
+        },
+        "risk": "read",
+        "stability": "stable",
+        "cost": {
+          "tier": "expensive"
+        }
+      }
+    ],
+    "related": [
+      {
+        "name": "holders_percentage",
+        "title": "Holder distribution",
+        "detail": "summary",
+        "via": {
+          "from": "holders_count",
+          "type": "alternative",
+          "reason": "share of supply per holder, not a count"
+        },
+        "summary": "What share of supply each holder controls, as top-N or bucketed percentages.",
+        "path": "tokens/holders",
+        "relations": [
+          {
+            "type": "pairs_with",
+            "target": "holders_top",
+            "reason": "the actual addresses behind the percentages"
+          },
+          {
+            "type": "alternative",
+            "target": "holders_count",
+            "reason": "share of supply per holder, not a count"
+          }
+        ]
+      },
+      {
+        "name": "holders_top",
+        "title": "Largest holders",
+        "detail": "summary",
+        "via": {
+          "from": "holders_count",
+          "type": "pairs_with",
+          "reason": "who the largest holders actually are"
+        },
+        "summary": "The biggest wallets holding a token, with balance and share of supply.",
+        "path": "tokens/holders",
+        "relations": [
+          {
+            "type": "pairs_with",
+            "target": "wallet_pnl",
+            "reason": "what those wallets actually made on the token"
+          },
+          {
+            "type": "pairs_with",
+            "target": "holders_count",
+            "reason": "who the largest holders actually are"
+          },
+          {
+            "type": "pairs_with",
+            "target": "holders_percentage",
+            "reason": "the actual addresses behind the percentages"
+          }
+        ]
+      },
+      {
+        "name": "token_price",
+        "title": "Token price",
+        "detail": "summary",
+        "via": {
+          "from": "token_resolve_symbol",
+          "type": "enables",
+          "reason": "if you only have a ticker, not an address"
+        },
+        "summary": "Current USD price of a token, and the price a given time ago.",
+        "path": "tokens/price",
+        "relations": [
+          {
+            "type": "alternative",
+            "target": "token_market_cap",
+            "reason": "price times supply, if the question was about size not unit price"
+          },
+          {
+            "type": "prerequisite",
+            "target": "token_resolve_symbol",
+            "reason": "if you only have a ticker, not an address"
+          }
+        ]
+      },
+      {
+        "name": "wallet_pnl",
+        "title": "Wallet profit and loss",
+        "detail": "summary",
+        "via": {
+          "from": "wallet_pnl_by_token",
+          "type": "broader",
+          "reason": "the same figure split per token, if you need to know which trade won"
+        },
+        "summary": "How much a wallet has made or lost overall, realized and unrealized, in USD.",
+        "path": "wallets/pnl",
+        "relations": [
+          {
+            "type": "narrower",
+            "target": "wallet_pnl_by_token",
+            "reason": "the same figure split per token, if you need to know which trade won"
+          },
+          {
+            "type": "pairs_with",
+            "target": "holders_top",
+            "reason": "what those wallets actually made on the token"
+          }
+        ]
+      }
+    ],
+    "budget": {
+      "maxBytes": 12000,
+      "usedBytes": 6813,
+      "truncated": false
+    },
+    "notice": null,
+    "nextCursor": null
+  }
+}

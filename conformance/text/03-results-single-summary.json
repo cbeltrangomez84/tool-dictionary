@@ -1,0 +1,53 @@
+{
+  "case": "03-results-single-summary",
+  "covers": "Singular \"1 result\", explicit summary detail, related suppressed.",
+  "dictionary": "crypto-data",
+  "request": {
+    "query": "market cap",
+    "limit": 1,
+    "detail": "summary",
+    "includeRelated": false
+  },
+  "response": {
+    "kind": "results",
+    "dictionary": {
+      "id": "crypto-data",
+      "version": 47,
+      "etag": "\"sha256:6ce993d8c9d19fcbc3baa9ba63c096c26fb183bcd057703ed41dbb126d9b4d8b\""
+    },
+    "query": {
+      "text": "market cap"
+    },
+    "results": [
+      {
+        "name": "token_market_cap",
+        "title": "Token market cap",
+        "detail": "summary",
+        "score": 32.028,
+        "matchedOn": [
+          "keywords",
+          "name",
+          "title",
+          "summary"
+        ],
+        "summary": "Market capitalisation of a token: price times circulating supply, in USD.",
+        "path": "tokens/price",
+        "relations": [
+          {
+            "type": "alternative",
+            "target": "token_price",
+            "reason": "price times supply, if the question was about size not unit price"
+          }
+        ]
+      }
+    ],
+    "related": [],
+    "budget": {
+      "maxBytes": 12000,
+      "usedBytes": 683,
+      "truncated": false
+    },
+    "notice": null,
+    "nextCursor": null
+  }
+}

@@ -1,0 +1,25 @@
+DICTIONARY crypto-data v47 — index
+NOTE: Nothing matched "holdrs of a tokn" well enough. See the suggestions, or search with one of the "try" queries below.
+
+DID YOU MEAN
+   holders_count — Token holder count  (did you mean "holder"?)
+
+CATEGORIES
+tokens (6) — Tokens: Everything about one token: price, supply, holders and trades.
+   try: "token price", "who holds this token", "token trade history"
+   tokens/holders (3) — Holders: Who owns a token and in what proportion.
+      try: "how many holders", "holder distribution", "top holders"
+      e.g. holders_count, holders_percentage, holders_top
+   tokens/price (2) — Price and market cap: Current and historical price, market cap and supply.
+      try: "price of a token", "market cap", "price 24h ago"
+      e.g. token_price, token_market_cap
+   tokens/lookup (1) — Lookup: Turn a ticker or a name into the contract address everything else needs.
+      try: "find token by symbol", "what is the contract address"
+      e.g. token_resolve_symbol
+wallets (2) — Wallets: What a wallet holds, what it traded and what it made or lost.
+   try: "wallet balance", "wallet pnl", "wallet trade history"
+   wallets/pnl (2) — Profit and loss: Realized and unrealized profit for a wallet, overall or per token.
+      try: "how much did this wallet make", "pnl per token"
+      e.g. wallet_pnl, wallet_pnl_by_token
+
+Search again with one of the "try" queries, or with a path to narrow to one branch.

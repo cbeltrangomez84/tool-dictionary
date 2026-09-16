@@ -1,0 +1,229 @@
+{
+  "case": "04-results-risk-and-deprecation",
+  "covers": "BETA, DEPRECATED and RISK lines; enum/default/required facets; examples with and without a note.",
+  "dictionary": "vectors",
+  "request": {
+    "query": "alert"
+  },
+  "response": {
+    "kind": "results",
+    "dictionary": {
+      "id": "vectors",
+      "version": 4,
+      "etag": "\"sha256:7de983a500f62fdc9b10f07b88b7e32d62850fc7748948fc3df7a03494306650\""
+    },
+    "query": {
+      "text": "alert"
+    },
+    "results": [
+      {
+        "name": "alert_create",
+        "title": "Create a price alert",
+        "detail": "full",
+        "score": 9.688,
+        "matchedOn": [
+          "keywords",
+          "name",
+          "title",
+          "path",
+          "description",
+          "inputDescriptions"
+        ],
+        "summary": "Watch a token and notify the caller when its price crosses a threshold.",
+        "path": "alerts",
+        "relations": [
+          {
+            "type": "pairs_with",
+            "target": "alert_delete",
+            "reason": "the same id is what cancels it"
+          },
+          {
+            "type": "predecessor",
+            "target": "alert_create_v0",
+            "reason": "same alert, and it accepts a direction"
+          }
+        ],
+        "stability": "beta",
+        "risk": "write",
+        "description": "The alert fires once and is then inactive; recreate it to watch again. Thresholds are in USD and are compared against the same price feed token_price reads.",
+        "input": {
+          "type": "object",
+          "properties": {
+            "address": {
+              "type": "string",
+              "description": "Token contract address or mint."
+            },
+            "threshold": {
+              "type": "number",
+              "description": "Price in USD that triggers the alert."
+            },
+            "direction": {
+              "type": "string",
+              "enum": [
+                "above",
+                "below"
+              ],
+              "default": "above"
+            },
+            "note": {
+              "type": "string",
+              "description": "Free text echoed back when the alert fires."
+            }
+          },
+          "required": [
+            "address",
+            "threshold"
+          ]
+        },
+        "returns": "The created alert, with its id and the price it is watching.",
+        "call": {
+          "type": "http",
+          "method": "POST",
+          "urlTemplate": "/v1/alerts",
+          "bodyTemplate": {
+            "address": "{address}",
+            "threshold": "{threshold}",
+            "direction": "{direction}",
+            "note": "{note}"
+          },
+          "baseUrl": "https://alerts.example.com",
+          "auth": {
+            "kind": "caller",
+            "in": "header",
+            "name": "x-api-key",
+            "value": "{{ALERTS_API_KEY}}"
+          }
+        },
+        "cost": {
+          "tier": "standard",
+          "note": "Counts against the alert quota, not the query quota."
+        },
+        "examples": [
+          {
+            "input": {
+              "address": "So11111111111111111111111111111111111111112",
+              "threshold": 250
+            },
+            "note": "fires when SOL goes above $250"
+          },
+          {
+            "input": {
+              "address": "So11111111111111111111111111111111111111112",
+              "threshold": 100,
+              "direction": "below"
+            }
+          }
+        ]
+      },
+      {
+        "name": "alert_delete",
+        "title": "Delete a price alert",
+        "detail": "full",
+        "score": 6.626,
+        "matchedOn": [
+          "keywords",
+          "name",
+          "title",
+          "summary",
+          "path",
+          "inputDescriptions"
+        ],
+        "summary": "Cancel an alert so it never fires.",
+        "path": "alerts",
+        "relations": [
+          {
+            "type": "pairs_with",
+            "target": "alert_create",
+            "reason": "the same id is what cancels it"
+          }
+        ],
+        "risk": "destructive",
+        "input": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Alert id returned by alert_create."
+            }
+          },
+          "required": [
+            "id"
+          ]
+        },
+        "returns": "Nothing beyond a confirmation.",
+        "call": {
+          "type": "http",
+          "method": "DELETE",
+          "urlTemplate": "/v1/alerts/{id}",
+          "baseUrl": "https://alerts.example.com",
+          "auth": {
+            "kind": "caller",
+            "in": "header",
+            "name": "x-api-key",
+            "value": "{{ALERTS_API_KEY}}"
+          }
+        },
+        "stability": "stable"
+      },
+      {
+        "name": "alert_create_v0",
+        "title": "Create a price alert (legacy)",
+        "detail": "full",
+        "score": 5.123,
+        "matchedOn": [
+          "keywords",
+          "name",
+          "title",
+          "summary",
+          "path"
+        ],
+        "summary": "The pre-2026 alert endpoint, kept alive for callers that have not migrated.",
+        "path": "alerts",
+        "relations": [
+          {
+            "type": "successor",
+            "target": "alert_create",
+            "reason": "same alert, and it accepts a direction"
+          }
+        ],
+        "stability": "deprecated",
+        "risk": "write",
+        "input": {
+          "type": "object",
+          "properties": {
+            "mint": {
+              "type": "string"
+            },
+            "usd": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "mint",
+            "usd"
+          ]
+        },
+        "call": {
+          "type": "http",
+          "method": "POST",
+          "urlTemplate": "/v0/alerts",
+          "baseUrl": "https://alerts.example.com",
+          "auth": {
+            "kind": "caller",
+            "in": "header",
+            "name": "x-api-key",
+            "value": "{{ALERTS_API_KEY}}"
+          }
+        }
+      }
+    ],
+    "related": [],
+    "budget": {
+      "maxBytes": 12000,
+      "usedBytes": 3520,
+      "truncated": false
+    },
+    "notice": null,
+    "nextCursor": null
+  }
+}

@@ -1,0 +1,137 @@
+{
+  "toolDictionary": "0.1",
+  "id": "vectors",
+  "title": "Rendering vectors",
+  "summary": "A small dictionary whose only job is to contain every case the text rendering has a rule for.",
+  "version": 4,
+  "generatedAt": "2026-09-15T00:00:00.000Z",
+  "defaults": {
+    "baseUrl": "https://alerts.example.com",
+    "auth": { "kind": "caller", "in": "header", "name": "x-api-key", "value": "{{ALERTS_API_KEY}}" },
+    "variables": {
+      "ALERTS_API_KEY": { "secret": true, "description": "API key for alerts.example.com, held by the executor." }
+    }
+  },
+  "index": {
+    "nodes": [
+      {
+        "path": "alerts",
+        "title": "Price alerts",
+        "summary": "Create, list and delete alerts that fire when a token crosses a price.",
+        "sampleQueries": ["tell me when a token goes above a price", "delete an alert"],
+        "examples": ["alert_create", "alert_delete"]
+      },
+      {
+        "path": "diagnostics",
+        "title": "Diagnostics",
+        "summary": "Tools that report on the service itself rather than on market data.",
+        "sampleQueries": ["is the service healthy"],
+        "children": [
+          {
+            "path": "diagnostics/probe",
+            "title": "Probes",
+            "summary": "Liveness and version checks reached over MCP.",
+            "sampleQueries": ["probe the upstream"]
+          }
+        ]
+      }
+    ]
+  },
+  "entries": [
+    {
+      "name": "alert_create",
+      "title": "Create a price alert",
+      "summary": "Watch a token and notify the caller when its price crosses a threshold.",
+      "description": "The alert fires once and is then inactive; recreate it to watch again. Thresholds are in USD and are compared against the same price feed token_price reads.",
+      "path": "alerts",
+      "keywords": ["alert", "notify", "price alert", "tell me when"],
+      "input": {
+        "type": "object",
+        "properties": {
+          "address": { "type": "string", "description": "Token contract address or mint." },
+          "threshold": { "type": "number", "description": "Price in USD that triggers the alert." },
+          "direction": { "type": "string", "enum": ["above", "below"], "default": "above" },
+          "note": { "type": "string", "description": "Free text echoed back when the alert fires." }
+        },
+        "required": ["address", "threshold"]
+      },
+      "returns": "The created alert, with its id and the price it is watching.",
+      "call": {
+        "type": "http",
+        "method": "POST",
+        "urlTemplate": "/v1/alerts",
+        "bodyTemplate": { "address": "{address}", "threshold": "{threshold}", "direction": "{direction}", "note": "{note}" }
+      },
+      "relations": [
+        { "type": "pairs_with", "target": "alert_delete", "reason": "the same id is what cancels it" }
+      ],
+      "risk": "write",
+      "stability": "beta",
+      "cost": { "tier": "standard", "note": "Counts against the alert quota, not the query quota." },
+      "examples": [
+        { "input": { "address": "So11111111111111111111111111111111111111112", "threshold": 250 }, "note": "fires when SOL goes above $250" },
+        { "input": { "address": "So11111111111111111111111111111111111111112", "threshold": 100, "direction": "below" } }
+      ]
+    },
+    {
+      "name": "alert_delete",
+      "title": "Delete a price alert",
+      "summary": "Cancel an alert so it never fires.",
+      "path": "alerts",
+      "keywords": ["delete alert", "cancel alert", "stop notifying me"],
+      "input": {
+        "type": "object",
+        "properties": { "id": { "type": "string", "description": "Alert id returned by alert_create." } },
+        "required": ["id"]
+      },
+      "returns": "Nothing beyond a confirmation.",
+      "call": { "type": "http", "method": "DELETE", "urlTemplate": "/v1/alerts/{id}" },
+      "risk": "destructive"
+    },
+    {
+      "name": "alert_create_v0",
+      "title": "Create a price alert (legacy)",
+      "summary": "The pre-2026 alert endpoint, kept alive for callers that have not migrated.",
+      "path": "alerts",
+      "keywords": ["alert", "legacy alert"],
+      "input": {
+        "type": "object",
+        "properties": { "mint": { "type": "string" }, "usd": { "type": "number" } },
+        "required": ["mint", "usd"]
+      },
+      "call": { "type": "http", "method": "POST", "urlTemplate": "/v0/alerts" },
+      "relations": [
+        { "type": "successor", "target": "alert_create", "reason": "same alert, and it accepts a direction" }
+      ],
+      "risk": "write",
+      "stability": "deprecated",
+      "deprecation": { "since": "2026-03-01", "replacedBy": "alert_create", "note": "Removed once the last caller migrates." }
+    },
+    {
+      "name": "probe_upstream",
+      "title": "Probe the upstream feed",
+      "summary": "Report whether the price feed is live and how far behind it is.",
+      "path": "diagnostics/probe",
+      "keywords": ["probe", "healthy", "is it up", "lag"],
+      "input": { "type": "object", "properties": {} },
+      "returns": "Liveness plus the age in seconds of the newest price.",
+      "call": { "type": "mcp", "server": "market-ops", "tool": "probe_feed" },
+      "cost": { "tier": "free" }
+    },
+    {
+      "name": "echo_request",
+      "title": "Echo a request back",
+      "summary": "Return the request exactly as the service received it, for debugging a caller.",
+      "path": "diagnostics",
+      "keywords": ["echo", "debug", "what did i send"],
+      "input": {
+        "type": "object",
+        "properties": { "text": { "type": "string", "description": "Anything; it comes back unchanged — quotes, \"nested\" ones included." } },
+        "required": ["text"]
+      },
+      "call": { "type": "local", "handler": "diagnostics.echo" },
+      "cost": { "tier": "free" }
+    }
+  ],
+  "sources": [{ "type": "manual", "url": "conformance/fixtures/vectors.dictionary.json" }]
+}

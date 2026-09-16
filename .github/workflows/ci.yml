@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run validate:spec
+      - run: npm run build
+
+  fixtures:
+    name: Checked-in artifacts are current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # The worked example and the conformance vectors are produced by the code
+      # in this repository. A change to the generator or the renderer that does
+      # not regenerate them is a change nobody reviewed.
+      - run: npm run example
+      - run: npm run conformance
+      - name: No diff after regeneration
+        run: |
+          if ! git diff --exit-code -- spec/examples conformance; then
+            echo "::error::regenerated artifacts differ from the checked-in ones — run 'npm run example' and 'npm run conformance' and commit the result"
+            exit 1
+          fi
+
+  docker:
+    name: Image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t tool-dictionary:ci .

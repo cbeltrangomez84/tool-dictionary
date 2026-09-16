@@ -1,0 +1,56 @@
+DICTIONARY crypto-data v47 — 3 results for "how many people hold this token"
+
+1. holders_count — Token holder count
+   Number of distinct wallets currently holding a token.
+   path: tokens/holders
+   Returns the count of unique addresses with a non-zero balance of the given token at the latest indexed block. Counts addresses, not people: one person may hold from several wallets, and contract, burn and exchange addresses are included unless you exclude them.
+   input: address (string, required) — Token contract address or Solana mint.
+          chain (string, one of solana|ethereum|base|bsc, default "solana") — Which chain the token lives on.
+          excludeContracts (boolean, default false) — Leave out contract and burn addresses.
+   returns: An integer count and the block height it was measured at.
+   call: GET https://data.example.com/v1/tokens/{address}/holders/count?chain={chain}&exclude_contracts={excludeContracts}  (auth: x-api-key header, injected by your own backend)
+   cost: standard
+   example: {"address":"So11111111111111111111111111111111111111112"}  (wSOL on Solana)
+   see also: holders_percentage (alternative) — share of supply per holder, not a count
+   see also: holders_top (pairs_with) — who the largest holders actually are
+   see also: token_resolve_symbol (prerequisite) — if you only have a ticker, not an address
+
+2. token_resolve_symbol — Find a token by symbol or name
+   Turn a ticker like BONK into the contract address every other tool needs.
+   path: tokens/lookup
+   Searches known tokens by symbol or name and returns candidates ranked by liquidity. Symbols are not unique: always check the returned market cap and liquidity before using a result.
+   input: query (string, required) — Ticker or name, e.g. 'BONK'.
+          chain (string, one of solana|ethereum|base|bsc)
+   returns: Up to 10 candidate tokens with address, chain, liquidity and market cap.
+   call: GET https://data.example.com/v1/tokens/search?q={query}&chain={chain}  (auth: x-api-key header, injected by your own backend)
+   cost: free
+   see also: holders_count (enables) — if you only have a ticker, not an address
+   see also: token_price (enables) — if you only have a ticker, not an address
+
+3. wallet_pnl_by_token — Wallet profit and loss per token
+   Profit and loss for a wallet broken down by each token it traded.
+   path: wallets/pnl
+   input: wallet (string, required) — Wallet address.
+          chain (string, one of solana|ethereum|base|bsc, default "solana")
+          limit (integer, default 25)
+   returns: One row per token with realized, unrealized and total USD profit.
+   call: GET https://data.example.com/v1/wallets/{wallet}/pnl/by-token?chain={chain}&limit={limit}  (auth: x-api-key header, injected by your own backend)
+   cost: expensive
+   see also: wallet_pnl (broader) — the same figure split per token, if you need to know which trade won
+
+RELATED
+   - holders_percentage — Holder distribution
+     What share of supply each holder controls, as top-N or bucketed percentages.
+     (alternative to holders_count: share of supply per holder, not a count)
+   - holders_top — Largest holders
+     The biggest wallets holding a token, with balance and share of supply.
+     (pairs_with to holders_count: who the largest holders actually are)
+   - token_price — Token price
+     Current USD price of a token, and the price a given time ago.
+     (enables to token_resolve_symbol: if you only have a ticker, not an address)
+   - wallet_pnl — Wallet profit and loss
+     How much a wallet has made or lost overall, realized and unrealized, in USD.
+     (broader to wallet_pnl_by_token: the same figure split per token, if you need to know which trade won)
+
+To use one, call it with the input shown. To see the full definition of any of
+these, search again with its exact name.

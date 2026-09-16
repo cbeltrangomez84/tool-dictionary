@@ -1,0 +1,63 @@
+{
+  "case": "02-results-degraded",
+  "covers": "A budget too small for the whole page: NOTE line, reduced detail, MORE cursor line.",
+  "dictionary": "crypto-data",
+  "request": {
+    "query": "holders",
+    "maxBytes": 1400
+  },
+  "response": {
+    "kind": "results",
+    "dictionary": {
+      "id": "crypto-data",
+      "version": 47,
+      "etag": "\"sha256:6ce993d8c9d19fcbc3baa9ba63c096c26fb183bcd057703ed41dbb126d9b4d8b\""
+    },
+    "query": {
+      "text": "holders"
+    },
+    "results": [
+      {
+        "name": "holders_count",
+        "title": "Token holder count",
+        "detail": "summary",
+        "score": 24.485,
+        "matchedOn": [
+          "keywords",
+          "name",
+          "title",
+          "path",
+          "summary",
+          "description"
+        ],
+        "summary": "Number of distinct wallets currently holding a token.",
+        "path": "tokens/holders",
+        "relations": [
+          {
+            "type": "alternative",
+            "target": "holders_percentage",
+            "reason": "share of supply per holder, not a count"
+          },
+          {
+            "type": "pairs_with",
+            "target": "holders_top",
+            "reason": "who the largest holders actually are"
+          },
+          {
+            "type": "prerequisite",
+            "target": "token_resolve_symbol",
+            "reason": "if you only have a ticker, not an address"
+          }
+        ]
+      }
+    ],
+    "related": [],
+    "budget": {
+      "maxBytes": 1400,
+      "usedBytes": 985,
+      "truncated": true
+    },
+    "notice": "The definition of holders_count exceeds the response budget; fetch it from /entries/holders_count.",
+    "nextCursor": "eyJxIjoiaG9sZGVycyIsIm8iOjF9"
+  }
+}
