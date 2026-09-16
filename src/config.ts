@@ -17,6 +17,8 @@ export interface FileConfig {
   rateLimitPerMinute?: number;
   /** Address clients reach the server at; fills absolute endpoints in the agent bundle (spec 14.4). */
   publicBaseUrl?: string;
+  /** Trust proxy headers: `true` or a comma-separated list of proxy addresses / CIDRs. Also `TD_TRUST_PROXY`. */
+  trustProxy?: boolean | string;
   limits?: Partial<Limits>;
   threshold?: Partial<ThresholdConfig>;
   adminTokens?: string[];
@@ -88,6 +90,8 @@ export async function loadConfig(file: string | undefined, env: NodeJS.ProcessEn
     throw new ConfigError(`invalid publicBaseUrl ${JSON.stringify(publicBaseUrl)}: expected an http(s) origin, optionally with a path prefix`);
   }
 
+  const trustProxy = parseTrustProxy(env.TD_TRUST_PROXY ?? fromFile.trustProxy);
+
   return {
     ...fromFile,
     host: env.TD_HOST ?? fromFile.host ?? '127.0.0.1',
@@ -95,5 +99,24 @@ export async function loadConfig(file: string | undefined, env: NodeJS.ProcessEn
     adminTokens,
     dictionaries,
     ...(publicBaseUrl !== undefined ? { publicBaseUrl } : {}),
+    ...(trustProxy !== undefined ? { trustProxy } : {}),
   };
+}
+
+/**
+ * `true`/`false` or a non-empty address list. The env form is a string, so
+ * "true" and "10.0.0.0/8, 127.0.0.1" are both accepted; anything else is a
+ * configuration error rather than a silent `false` that leaves the rate
+ * limiter keyed on the proxy.
+ */
+function parseTrustProxy(value: unknown): boolean | string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const text = value.trim();
+    if (text === 'true') return true;
+    if (text === 'false') return false;
+    if (text.length > 0 && !/^\d+$/.test(text)) return text;
+  }
+  throw new ConfigError(`invalid trustProxy ${JSON.stringify(value)}: expected true, false, or a comma-separated list of proxy addresses / CIDRs`);
 }

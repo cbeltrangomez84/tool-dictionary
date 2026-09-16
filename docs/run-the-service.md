@@ -14,6 +14,7 @@ One JSON file. Every string may reference an environment variable as
   "host": "0.0.0.0",
   "port": 8080,
   "publicBaseUrl": "https://tools.example.com",
+  "trustProxy": true,
   "adminTokens": ["${TD_ADMIN_TOKEN}"],
   "rateLimitPerMinute": 600,
   "dictionaries": [
@@ -40,9 +41,10 @@ One JSON file. Every string may reference an environment variable as
 | `readTokens` | Bearer tokens required to read this dictionary. Empty means public. |
 | `threshold` | When a hit counts as a match: an absolute BM25 floor and a fraction of the top score. Below both, the search returns the index instead. |
 | `limits` | Result and byte caps (`defaultLimit`, `maxLimit`, `defaultMaxBytes`, `maxMaxBytes`, `maxQueryChars`, `searchDeadlineMs`). Defaults are the spec's. |
-| `rateLimitPerMinute` | Per token, or per IP for anonymous callers. |
+| `rateLimitPerMinute` | Per token, or per IP for anonymous callers. `0` disables. |
+| `trustProxy` | Trust `X-Forwarded-For` / `X-Forwarded-Proto` from the peer: `true`, or a comma-separated list of proxy addresses / CIDRs (a hop count is not accepted; Fastify 5 cannot validate the peer from one). Set it whenever a reverse proxy (Caddy, nginx, a load balancer) sits in front, otherwise every anonymous caller shares the proxy's IP and therefore one rate-limit bucket. Also `TD_TRUST_PROXY`. |
 
-`TD_HOST` and `TD_PORT` override the file. `TD_CONFIG` names the file when no
+`TD_HOST`, `TD_PORT` and `TD_TRUST_PROXY` override the file. `TD_CONFIG` names the file when no
 argument is given.
 
 ```bash
@@ -93,6 +95,27 @@ curl -s localhost:8080/v1/health
 
 `ok` is process liveness. `stale` per dictionary is the signal to alert on: the
 service is answering, from a copy it could not refresh.
+
+## As a dependency
+
+The package builds itself on install (`prepare`), so it can be pinned straight
+from git and embedded in another service:
+
+```bash
+npm install github:cbeltrangomez84/tool-dictionary#v0.1.1
+```
+
+```ts
+import { buildServer, DictionaryService } from 'tool-dictionary';
+
+const service = new DictionaryService({ globalAdminTokens: [process.env.TD_ADMIN_TOKEN!] });
+await service.install({ id: 'pool-scout', source: { kind: 'file', location: '/etc/tool-dictionary/pool-scout.json' } });
+const app = buildServer({ service, trustProxy: true, publicBaseUrl: 'https://tools.example.com' });
+await app.listen({ host: '0.0.0.0', port: 8080 });
+```
+
+`renderResultsText`, `renderIndexText` and `renderEntriesText` are exported too,
+for hosts that serve the text form over their own transport.
 
 ## Docker
 

@@ -3,7 +3,7 @@
  * headers the spec requires (ETag, Cache-Control on /catalog, Retry-After on
  * 503), and render errors as `{ error: { code, message, details } }`.
  */
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, type FastifyServerOptions } from 'fastify';
 import { agentBundle, usagePrompt } from '../agent';
 import { etagMatches } from '../etag';
 import { renderEntriesText } from '../render/text';
@@ -24,6 +24,16 @@ export interface ServerOptions {
    * a proxy rewrites them.
    */
   publicBaseUrl?: string;
+  /**
+   * Trust `X-Forwarded-For` / `X-Forwarded-Proto` from the peer. Required
+   * behind a reverse proxy: without it every anonymous caller shares the
+   * proxy's IP and therefore one rate-limit bucket, and request-derived
+   * endpoints carry the proxy's scheme. Forwarded to Fastify unchanged:
+   * `true` (trust every peer) or a comma-separated list of proxy addresses /
+   * CIDRs. A hop count is deliberately not offered: Fastify 5 fails it closed
+   * because it cannot validate the immediate peer.
+   */
+  trustProxy?: boolean | string;
 }
 
 function bearer(request: FastifyRequest): string | undefined {
@@ -62,7 +72,12 @@ class RateLimiter {
 
 export function buildServer(options: ServerOptions): FastifyInstance {
   const { service } = options;
-  const app = Fastify({ logger: options.logger ?? false, bodyLimit: options.bodyLimitBytes ?? 32 * 1024 });
+  const serverOptions: FastifyServerOptions = {
+    logger: options.logger ?? false,
+    bodyLimit: options.bodyLimitBytes ?? 32 * 1024,
+    trustProxy: options.trustProxy ?? false,
+  };
+  const app = Fastify(serverOptions);
   const limiter = new RateLimiter(options.rateLimitPerMinute ?? 600);
 
   app.setErrorHandler((error, _request, reply) => {

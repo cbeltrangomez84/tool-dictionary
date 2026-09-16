@@ -3,7 +3,8 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# --ignore-scripts: `prepare` builds, and src is not copied yet.
+RUN npm ci --ignore-scripts
 COPY tsconfig.json ./
 COPY spec ./spec
 COPY src ./src
@@ -13,7 +14,7 @@ FROM node:20-alpine
 ENV NODE_ENV=production
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts
 COPY --from=build /app/dist ./dist
 # The JSON Schema is read at runtime by the validator.
 COPY spec/schema ./spec/schema

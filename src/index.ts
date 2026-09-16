@@ -16,6 +16,7 @@ export { DictionaryService, ServiceError } from './service';
 export { loadDictionary, LoadError, effectiveCall } from './load';
 export { resolveCall, ResolveError, type ResolveOptions, type ResolvedRequest } from './resolve';
 export { validateDictionary } from './validate';
+export { renderResultsText, renderIndexText, renderEntriesText } from './render/text';
 export type * from './types';
 
 async function main(): Promise<void> {
@@ -44,6 +45,7 @@ async function main(): Promise<void> {
     ...(config.bodyLimitBytes !== undefined ? { bodyLimitBytes: config.bodyLimitBytes } : {}),
     ...(config.rateLimitPerMinute !== undefined ? { rateLimitPerMinute: config.rateLimitPerMinute } : {}),
     ...(config.publicBaseUrl !== undefined ? { publicBaseUrl: config.publicBaseUrl } : {}),
+    ...(config.trustProxy !== undefined ? { trustProxy: config.trustProxy } : {}),
   });
   const shutdown = async () => {
     await app.close();

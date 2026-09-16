@@ -4,6 +4,18 @@ All notable changes to the specification and the reference implementation.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 specification version and the package version move together while 0.x.
 
+## [0.1.1] — 2026-09-16
+
+### Reference implementation
+- `trustProxy` option (config key and `TD_TRUST_PROXY`), forwarded to Fastify.
+  Behind a reverse proxy the per-IP rate limit keyed every anonymous caller on
+  the proxy's address, so the limit was either meaningless or an outage.
+- `prepare` script builds on install, so the package can be pinned as an npm
+  git dependency (`npm install github:cbeltrangomez84/tool-dictionary#<ref>`).
+  The Dockerfile installs with `--ignore-scripts` accordingly.
+- `renderResultsText`, `renderIndexText` and `renderEntriesText` are exported
+  from the package entrypoint.
+
 ## [0.1.0] — 2026-09-16
 
 First public draft.

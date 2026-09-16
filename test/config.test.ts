@@ -25,3 +25,21 @@ describe('config: publicBaseUrl', () => {
     await expect(loadConfig(undefined, { TD_ADMIN_TOKENS: 'root', TD_PUBLIC_BASE_URL: 'https://dict.example.com/?x=1' })).rejects.toThrow(/publicBaseUrl/);
   });
 });
+
+describe('config: trustProxy', () => {
+  it('accepts the file value and the string forms of TD_TRUST_PROXY', async () => {
+    const env = { TD_ADMIN_TOKENS: 'root' };
+    expect((await loadConfig(undefined, env)).trustProxy).toBeUndefined();
+    const file = await configFile({ trustProxy: true, adminTokens: ['root'] });
+    expect((await loadConfig(file, {})).trustProxy).toBe(true);
+    expect((await loadConfig(file, { TD_TRUST_PROXY: 'false' })).trustProxy).toBe(false);
+    expect((await loadConfig(file, { TD_TRUST_PROXY: '10.0.0.0/8, 127.0.0.1' })).trustProxy).toBe('10.0.0.0/8, 127.0.0.1');
+  });
+
+  it('rejects a hop count and an empty list', async () => {
+    const file = await configFile({ trustProxy: 2, adminTokens: ['root'] });
+    await expect(loadConfig(file, {})).rejects.toThrow(/trustProxy/);
+    await expect(loadConfig(undefined, { TD_ADMIN_TOKENS: 'root', TD_TRUST_PROXY: '1' })).rejects.toThrow(/trustProxy/);
+    await expect(loadConfig(undefined, { TD_ADMIN_TOKENS: 'root', TD_TRUST_PROXY: '  ' })).rejects.toBeInstanceOf(ConfigError);
+  });
+});

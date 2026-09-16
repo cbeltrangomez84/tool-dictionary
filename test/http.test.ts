@@ -169,4 +169,22 @@ describe('HTTP API', () => {
     expect(Number(third.headers['retry-after'])).toBeGreaterThan(0);
     await limited.close();
   });
+
+  it('keys anonymous callers by the forwarded address only when trustProxy is set', async () => {
+    const url = '/v1/dictionaries/crypto-data/version';
+    const forwarded = (ip: string) => ({ method: 'GET' as const, url, headers: { 'x-forwarded-for': ip } });
+
+    const behindProxy = buildServer({ service, rateLimitPerMinute: 1, trustProxy: true });
+    await behindProxy.ready();
+    expect((await behindProxy.inject(forwarded('203.0.113.1'))).statusCode).toBe(200);
+    expect((await behindProxy.inject(forwarded('203.0.113.2'))).statusCode).toBe(200);
+    expect((await behindProxy.inject(forwarded('203.0.113.1'))).statusCode).toBe(429);
+    await behindProxy.close();
+
+    const direct = buildServer({ service, rateLimitPerMinute: 1 });
+    await direct.ready();
+    expect((await direct.inject(forwarded('203.0.113.1'))).statusCode).toBe(200);
+    expect((await direct.inject(forwarded('203.0.113.2'))).statusCode).toBe(429);
+    await direct.close();
+  });
 });
