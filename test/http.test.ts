@@ -118,6 +118,33 @@ describe('HTTP API', () => {
     await pinned.close();
   });
 
+  it('accepts the agent-runtime envelope on POST bodies (spec 9.8)', async () => {
+    const wrapped = await app.inject({
+      method: 'POST',
+      url: '/v1/dictionaries/crypto-data/search',
+      payload: { tool: 'search_tools', input: { query: 'holders', limit: 1 }, chatId: 'c1', callId: 'k1' },
+    });
+    expect(wrapped.statusCode).toBe(200);
+    expect(wrapped.json()).toMatchObject({ kind: 'results', query: { text: 'holders' } });
+    expect(wrapped.json().results).toHaveLength(1);
+
+    const batch = await app.inject({
+      method: 'POST',
+      url: '/v1/dictionaries/crypto-data/entries:batchGet',
+      payload: { tool: 'batch', input: { names: ['holders_count'] }, chatId: 'c1' },
+    });
+    expect(batch.statusCode).toBe(200);
+    expect(batch.json().entries.map((e: { name: string }) => e.name)).toEqual(['holders_count']);
+
+    // Top-level args win: an `input` key next to a real argument is not the envelope.
+    const direct = await app.inject({ method: 'POST', url: '/v1/dictionaries/crypto-data/search', payload: { query: 'price', input: { query: 'holders' } } });
+    expect(direct.json().query.text).toBe('price');
+
+    const mismatch = await app.inject({ method: 'POST', url: '/v1/dictionaries/crypto-data/search', payload: { query: 'price', dictionary: 'other' } });
+    expect(mismatch.statusCode).toBe(400);
+    expect(mismatch.json().error.code).toBe('dictionary_mismatch');
+  });
+
   it('protects admin routes and validates on PUT', async () => {
     const anon = await app.inject({ method: 'POST', url: '/v1/dictionaries/crypto-data/refresh' });
     expect(anon.statusCode).toBe(401);

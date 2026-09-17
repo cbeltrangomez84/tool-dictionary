@@ -9,8 +9,39 @@ describe('agent bundle (spec 14)', () => {
       ['list_tools', 'GET', 'https://dict.example.com/v1/dictionaries/crypto%20data/entries'],
     ]);
     expect(tools[0]!.input_schema).toMatchObject({ type: 'object', required: ['query'] });
-    expect(Object.keys((tools[0]!.input_schema as { properties: object }).properties)).toEqual(['query', 'limit', 'path']);
+    expect(Object.keys((tools[0]!.input_schema as { properties: object }).properties)).toEqual(['query', 'limit', 'path', 'dictionary']);
     expect(tools[1]!.input_schema).toMatchObject({ type: 'object' });
+  });
+
+  it('declares execute_tool only when execution is on (spec 14.5)', () => {
+    const off = agentTools('https://dict.example.com', 'crypto-data');
+    expect(off.map((t) => t.name)).toEqual(['search_tools', 'list_tools']);
+    expect(off[0]!.description).toContain('the endpoint to call');
+
+    const on = agentTools('https://dict.example.com', 'crypto-data', { execute: true });
+    expect(on.map((t) => [t.name, t.method, t.endpoint])).toEqual([
+      ['search_tools', 'POST', 'https://dict.example.com/v1/dictionaries/crypto-data/search'],
+      ['list_tools', 'GET', 'https://dict.example.com/v1/dictionaries/crypto-data/entries'],
+      ['execute_tool', 'POST', 'https://dict.example.com/v1/dictionaries/crypto-data/execute'],
+    ]);
+    const execute = on[2]!.input_schema as { required: string[]; properties: Record<string, { type: string }> };
+    expect(execute.required).toEqual(['name', 'params']);
+    expect(execute.properties.name!.type).toBe('string');
+    expect(execute.properties.params!.type).toBe('object');
+    expect(execute.properties.dictionary!.type).toBe('string');
+    // The search description stops pointing the model at endpoints once it can execute by name.
+    expect(on[0]!.description).not.toContain('the endpoint to call');
+    expect(on[0]!.description).toContain('execute_tool');
+  });
+
+  it('adds the execute loop to the prompts only when execution is on', () => {
+    const one = { id: 'crypto-data', title: 'Crypto data', summary: 'Token holders.' };
+    expect(systemPrompt(one)).not.toContain('execute_tool');
+    expect(systemPrompt(one, { execute: true })).toContain('execute_tool');
+    expect(systemPrompt(one, { execute: true })).toContain('never need a URL or a key');
+    const two = [one, { id: 'nft', title: 'NFT', summary: 'Collections.' }];
+    expect(usagePrompt(two)).not.toContain('execute_tool');
+    expect(usagePrompt(two, { execute: true })).toContain('Name the dictionary in every call');
   });
 
   it('builds the single-dictionary prompt without a double period', () => {

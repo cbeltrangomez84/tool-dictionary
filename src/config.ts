@@ -7,6 +7,7 @@
  */
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import type { ExecutionConfig } from './execute';
 import type { DictionaryConfig, Limits, ThresholdConfig } from './service';
 
 export interface FileConfig {
@@ -21,6 +22,12 @@ export interface FileConfig {
   trustProxy?: boolean | string;
   limits?: Partial<Limits>;
   threshold?: Partial<ThresholdConfig>;
+  /**
+   * Catalogue execution (spec 9.7). Off unless `enabled` is true; also
+   * `TD_EXECUTE=true|false`. `variables` are non-secret values for
+   * `{{VARIABLE}}` references; the caller-held credential never goes here.
+   */
+  execution?: Partial<ExecutionConfig>;
   adminTokens?: string[];
   dictionaries?: DictionaryConfig[];
 }
@@ -63,6 +70,45 @@ function assertDictionaryConfig(d: unknown, i: number): asserts d is DictionaryC
       throw new ConfigError(`${at}.${key} must be an array of non-empty strings`);
     }
   }
+  if (cfg.execute !== undefined && typeof cfg.execute !== 'boolean') throw new ConfigError(`${at}.execute must be a boolean`);
+}
+
+const VARIABLE_NAME = /^[A-Z][A-Z0-9_]*$/;
+
+/** Every field optional; every present field checked, so a typo fails at start rather than at the first execute. */
+function parseExecution(raw: unknown, env: NodeJS.ProcessEnv): Partial<ExecutionConfig> | undefined {
+  if (raw !== undefined && (!raw || typeof raw !== 'object' || Array.isArray(raw))) throw new ConfigError('execution must be an object');
+  const cfg = { ...((raw ?? {}) as Record<string, unknown>) };
+  if (env.TD_EXECUTE !== undefined) {
+    const text = env.TD_EXECUTE.trim();
+    if (text !== 'true' && text !== 'false') throw new ConfigError(`invalid TD_EXECUTE ${JSON.stringify(env.TD_EXECUTE)}: expected true or false`);
+    cfg.enabled = text === 'true';
+  }
+  const out: Partial<ExecutionConfig> = {};
+  if (cfg.enabled !== undefined) {
+    if (typeof cfg.enabled !== 'boolean') throw new ConfigError('execution.enabled must be a boolean');
+    out.enabled = cfg.enabled;
+  }
+  for (const key of ['maxTimeoutMs', 'defaultTimeoutMs', 'maxResponseBytes'] as const) {
+    if (cfg[key] === undefined) continue;
+    const n = cfg[key];
+    if (typeof n !== 'number' || !Number.isInteger(n) || n <= 0) throw new ConfigError(`execution.${key} must be a positive integer`);
+    out[key] = n;
+  }
+  if (cfg.variables !== undefined) {
+    const vars = cfg.variables;
+    if (!vars || typeof vars !== 'object' || Array.isArray(vars)) throw new ConfigError('execution.variables must be an object of NAME: value');
+    const variables: Record<string, string> = {};
+    for (const [name, value] of Object.entries(vars as Record<string, unknown>)) {
+      if (!VARIABLE_NAME.test(name)) throw new ConfigError(`execution.variables: "${name}" is not a variable name (UPPER_SNAKE)`);
+      if (typeof value !== 'string') throw new ConfigError(`execution.variables.${name} must be a string`);
+      variables[name] = value;
+    }
+    out.variables = variables;
+  }
+  const unknown = Object.keys(cfg).filter((k) => !['enabled', 'maxTimeoutMs', 'defaultTimeoutMs', 'maxResponseBytes', 'variables'].includes(k));
+  if (unknown.length > 0) throw new ConfigError(`execution has unknown keys: ${unknown.join(', ')}`);
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 export async function loadConfig(file: string | undefined, env: NodeJS.ProcessEnv = process.env): Promise<ResolvedConfig> {
@@ -91,6 +137,7 @@ export async function loadConfig(file: string | undefined, env: NodeJS.ProcessEn
   }
 
   const trustProxy = parseTrustProxy(env.TD_TRUST_PROXY ?? fromFile.trustProxy);
+  const execution = parseExecution(fromFile.execution, env);
 
   return {
     ...fromFile,
@@ -100,6 +147,7 @@ export async function loadConfig(file: string | undefined, env: NodeJS.ProcessEn
     dictionaries,
     ...(publicBaseUrl !== undefined ? { publicBaseUrl } : {}),
     ...(trustProxy !== undefined ? { trustProxy } : {}),
+    ...(execution !== undefined ? { execution } : {}),
   };
 }
 

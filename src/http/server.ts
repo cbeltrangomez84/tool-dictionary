@@ -6,8 +6,9 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, type FastifyServerOptions } from 'fastify';
 import { agentBundle, usagePrompt } from '../agent';
 import { etagMatches } from '../etag';
+import { renderExecuteText } from '../execute';
 import { renderEntriesText } from '../render/text';
-import { DictionaryService, ServiceError, type Access } from '../service';
+import { DictionaryService, ServiceError, type Access, type RawExecuteRequest } from '../service';
 import type { SearchRequest } from '../types';
 
 export interface ServerOptions {
@@ -48,6 +49,33 @@ function errorBody(error: ServiceError) {
 }
 
 type Params = { id: string; name?: string };
+
+/**
+ * Request bodies arrive either as the arguments themselves or wrapped in an
+ * agent-runtime envelope, `{ tool, input: { ...args }, chatId, callId }`
+ * (spec 9.8). The envelope form is used only when none of the route's own
+ * fields sit at the top level, so a body that legitimately carries `input`
+ * as an argument is never misread.
+ */
+function unwrap(body: unknown, fields: readonly string[]): Record<string, unknown> {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return {};
+  const record = body as Record<string, unknown>;
+  const direct = fields.some((f) => record[f] !== undefined);
+  const input = record.input;
+  if (!direct && input && typeof input === 'object' && !Array.isArray(input)) return input as Record<string, unknown>;
+  return record;
+}
+
+const SEARCH_FIELDS = ['query', 'q', 'limit', 'detail', 'path', 'risk', 'maxBytes', 'format', 'cursor', 'includeRelated'] as const;
+const EXECUTE_FIELDS = ['name', 'params'] as const;
+const BATCH_FIELDS = ['names'] as const;
+
+/** A `dictionary` argument on a per-dictionary route must agree with the path (spec 9.8). */
+function assertSameDictionary(body: Record<string, unknown>, id: string): void {
+  const given = body.dictionary;
+  if (given === undefined || given === null || given === '') return;
+  if (given !== id) throw new ServiceError(400, 'dictionary_mismatch', `"dictionary" is ${JSON.stringify(given)} but this endpoint serves "${id}"`, [{ dictionary: id }]);
+}
 
 class RateLimiter {
   private readonly buckets = new Map<string, { count: number; windowStart: number }>();
@@ -107,8 +135,11 @@ export function buildServer(options: ServerOptions): FastifyInstance {
   const baseUrlOf = (request: FastifyRequest) => (options.publicBaseUrl ?? `${request.protocol}://${request.host}`).replace(/\/+$/, '');
   const endpointsOf = (request: FastifyRequest, id: string) => {
     const root = `${baseUrlOf(request)}/v1/dictionaries/${encodeURIComponent(id)}`;
-    return { search: `${root}/search`, entries: `${root}/entries`, index: `${root}/index`, tool: `${root}/tool`, catalog: `${root}/catalog` };
+    const endpoints: Record<string, string> = { search: `${root}/search`, entries: `${root}/entries`, index: `${root}/index`, tool: `${root}/tool`, catalog: `${root}/catalog` };
+    if (service.executable(id)) endpoints.execute = `${root}/execute`;
+    return endpoints;
   };
+  const executes = (ids: string[]) => ids.some((id) => service.executable(id));
 
   const sendSearch = (reply: FastifyReply, built: { body: string; response: { budget: { usedBytes: number; truncated: boolean } } }, format: string | undefined, etag: string) => {
     reply.header('etag', etag);
@@ -126,6 +157,7 @@ export function buildServer(options: ServerOptions): FastifyInstance {
       ok: true,
       now: new Date().toISOString(),
       limits: service.effectiveLimits,
+      execution: service.executionSummary,
       dictionaries: service.list(token),
     };
   });
@@ -149,36 +181,51 @@ export function buildServer(options: ServerOptions): FastifyInstance {
         stale: d.stale,
         public: d.public,
         endpoints: endpointsOf(request, d.id),
+        execute: service.executable(d.id),
       })),
-      usage: usagePrompt(listed.filter((d) => d.loaded).map((d) => ({ id: d.id, title: d.title!, summary: d.summary! }))),
+      usage: usagePrompt(
+        listed.filter((d) => d.loaded).map((d) => ({ id: d.id, title: d.title!, summary: d.summary! })),
+        { execute: executes(listed.filter((d) => d.loaded).map((d) => d.id)) },
+      ),
     };
   });
 
   // --- agent bundle ---------------------------------------------------------
-  app.get<{ Params: Params }>('/v1/dictionaries/:id/tool', async (request, reply) => {
-    guard(request, request.params.id, 'read');
-    const bundle = agentBundle(baseUrlOf(request), service.describe(request.params.id));
+  const sendBundle = (request: FastifyRequest, reply: FastifyReply, id: string) => {
+    guard(request, id, 'read');
+    const bundle = agentBundle(baseUrlOf(request), service.describe(id), { execute: service.executable(id) });
     reply.header('etag', bundle.dictionary.etag);
     reply.header('cache-control', 'max-age=60, must-revalidate');
     if (etagMatches(request.headers['if-none-match'], bundle.dictionary.etag)) return reply.status(304).send();
     return bundle;
-  });
+  };
+  app.get<{ Params: Params }>('/v1/dictionaries/:id/tool', async (request, reply) => sendBundle(request, reply, request.params.id));
+  app.get<{ Querystring: { dictionary?: string } }>('/v1/tool', async (request, reply) =>
+    sendBundle(request, reply, service.resolveDictionary(bearer(request), request.query.dictionary)),
+  );
 
   // --- search ---------------------------------------------------------------
-  const handleSearch = async (request: FastifyRequest<{ Params: Params }>, reply: FastifyReply, raw: SearchRequest) => {
-    guard(request, request.params.id, 'read');
-    const built = await service.search(request.params.id, raw);
-    const version = service.version(request.params.id);
+  const handleSearch = async (request: FastifyRequest, reply: FastifyReply, id: string, raw: SearchRequest) => {
+    guard(request, id, 'read');
+    const built = await service.search(id, raw);
+    const version = service.version(id);
     return sendSearch(reply, built, raw.format, version.etag);
   };
 
   app.post<{ Params: Params; Body: unknown }>('/v1/dictionaries/:id/search', async (request, reply) => {
-    const body = request.body && typeof request.body === 'object' ? (request.body as SearchRequest) : {};
-    return handleSearch(request, reply, body);
+    const body = unwrap(request.body, SEARCH_FIELDS);
+    assertSameDictionary(body, request.params.id);
+    return handleSearch(request, reply, request.params.id, body as SearchRequest);
   });
 
-  app.get<{ Params: Params; Querystring: Record<string, string | string[] | undefined> }>('/v1/dictionaries/:id/search', async (request, reply) => {
-    const q = request.query;
+  // Service-level form (spec 9.8): the body names the dictionary, or there is only one.
+  app.post<{ Body: unknown }>('/v1/search', async (request, reply) => {
+    const body = unwrap(request.body, SEARCH_FIELDS);
+    const id = service.resolveDictionary(bearer(request), body.dictionary);
+    return handleSearch(request, reply, id, body as SearchRequest);
+  });
+
+  const searchFromQuery = (q: Record<string, string | string[] | undefined>): SearchRequest => {
     const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
     const raw: SearchRequest = {};
     const query = one(q.query) ?? one(q.q);
@@ -193,7 +240,17 @@ export function buildServer(options: ServerOptions): FastifyInstance {
     if (format !== undefined) raw.format = format as NonNullable<SearchRequest['format']>;
     if (one(q.cursor) !== undefined) raw.cursor = one(q.cursor) as string;
     if (one(q.includeRelated) !== undefined) raw.includeRelated = one(q.includeRelated) !== 'false';
-    return handleSearch(request, reply, raw);
+    return raw;
+  };
+
+  app.get<{ Params: Params; Querystring: Record<string, string | string[] | undefined> }>('/v1/dictionaries/:id/search', async (request, reply) =>
+    handleSearch(request, reply, request.params.id, searchFromQuery(request.query)),
+  );
+
+  app.get<{ Querystring: Record<string, string | string[] | undefined> }>('/v1/search', async (request, reply) => {
+    const dictionary = Array.isArray(request.query.dictionary) ? request.query.dictionary[0] : request.query.dictionary;
+    const id = service.resolveDictionary(bearer(request), dictionary);
+    return handleSearch(request, reply, id, searchFromQuery(request.query));
   });
 
   // --- index ----------------------------------------------------------------
@@ -231,12 +288,55 @@ export function buildServer(options: ServerOptions): FastifyInstance {
     return { dictionary: stampOf(service, request.params.id), entry, ...(resolvedFrom ? { resolvedFrom } : {}) };
   });
 
-  app.post<{ Params: Params; Body: { names?: unknown } }>('/v1/dictionaries/:id/entries:batchGet', async (request, reply) => {
+  app.post<{ Params: Params; Body: unknown }>('/v1/dictionaries/:id/entries:batchGet', async (request, reply) => {
     guard(request, request.params.id, 'read');
-    const names = Array.isArray(request.body?.names) ? request.body.names.filter((n): n is string => typeof n === 'string').slice(0, 50) : [];
+    const body = unwrap(request.body, BATCH_FIELDS);
+    assertSameDictionary(body, request.params.id);
+    const names = Array.isArray(body.names) ? body.names.filter((n): n is string => typeof n === 'string').slice(0, 50) : [];
     const result = service.batchGet(request.params.id, names);
     reply.header('etag', result.etag);
     return { dictionary: stampOf(service, request.params.id), entries: result.entries, missing: result.missing };
+  });
+
+  // --- execute (spec 9.7) ---------------------------------------------------
+  // The service runs one of its own entries for the caller. Nothing in the
+  // body chooses a URL; the caller's credential, when the entry declares one,
+  // is read from the incoming headers and forwarded, never kept.
+  const handleExecute = async (request: FastifyRequest<{ Querystring?: { format?: string } }>, reply: FastifyReply, id: string, body: Record<string, unknown>) => {
+    guard(request, id, 'read');
+    const raw: RawExecuteRequest = { name: body.name, params: body.params, maxBytes: body.maxBytes, format: body.format ?? request.query?.format };
+    const result = await service.execute(id, raw, request.headers);
+    reply.header('cache-control', 'no-store');
+    reply.header('x-budget-used-bytes', String(result.budget.usedBytes));
+    reply.header('x-budget-truncated', String(result.budget.truncated));
+    reply.header('x-upstream-status', String(result.status));
+    if (raw.format === 'text') return reply.type('text/plain; charset=utf-8').send(renderExecuteText(result));
+    return result;
+  };
+
+  app.post<{ Params: Params; Body: unknown; Querystring: { format?: string } }>('/v1/dictionaries/:id/execute', async (request, reply) => {
+    const body = unwrap(request.body, EXECUTE_FIELDS);
+    assertSameDictionary(body, request.params.id);
+    return handleExecute(request, reply, request.params.id, body);
+  });
+
+  app.post<{ Body: unknown; Querystring: { format?: string } }>('/v1/execute', async (request, reply) => {
+    const body = unwrap(request.body, EXECUTE_FIELDS);
+    const id = service.resolveDictionary(bearer(request), body.dictionary);
+    return handleExecute(request, reply, id, body);
+  });
+
+  app.get<{ Querystring: Record<string, string | undefined> }>('/v1/entries', async (request, reply) => {
+    const id = service.resolveDictionary(bearer(request), request.query.dictionary);
+    guard(request, id, 'read');
+    const options: Parameters<DictionaryService['listEntries']>[1] = {};
+    if (request.query.path) options.path = request.query.path;
+    const { response, etag } = service.listEntries(id, options);
+    reply.header('etag', etag);
+    reply.header('cache-control', 'max-age=60, must-revalidate');
+    if (etagMatches(request.headers['if-none-match'], etag)) return reply.status(304).send();
+    if (request.query.format === 'text') return reply.type('text/plain; charset=utf-8').send(renderEntriesText(response));
+    return response;
   });
 
   // --- catalog / version ----------------------------------------------------

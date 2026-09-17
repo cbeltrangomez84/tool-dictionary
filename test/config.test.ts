@@ -43,3 +43,23 @@ describe('config: trustProxy', () => {
     await expect(loadConfig(undefined, { TD_ADMIN_TOKENS: 'root', TD_TRUST_PROXY: '  ' })).rejects.toBeInstanceOf(ConfigError);
   });
 });
+
+describe('config: execution (spec 9.7)', () => {
+  it('is absent unless configured, and TD_EXECUTE flips enabled', async () => {
+    expect((await loadConfig(undefined, { TD_ADMIN_TOKENS: 'root' })).execution).toBeUndefined();
+    expect((await loadConfig(undefined, { TD_ADMIN_TOKENS: 'root', TD_EXECUTE: 'true' })).execution).toEqual({ enabled: true });
+    const file = await configFile({ adminTokens: ['root'], execution: { enabled: true, maxTimeoutMs: 5000, variables: { REGION: '${REGION}' } } });
+    expect((await loadConfig(file, { REGION: 'eu' })).execution).toEqual({ enabled: true, maxTimeoutMs: 5000, variables: { REGION: 'eu' } });
+    expect((await loadConfig(file, { REGION: 'eu', TD_EXECUTE: 'false' })).execution).toMatchObject({ enabled: false });
+  });
+
+  it('rejects malformed execution settings at start', async () => {
+    await expect(loadConfig(await configFile({ adminTokens: ['root'], execution: { enabled: 'yes' } }), {})).rejects.toThrow(/execution.enabled/);
+    await expect(loadConfig(await configFile({ adminTokens: ['root'], execution: { maxTimeoutMs: 0 } }), {})).rejects.toThrow(/maxTimeoutMs/);
+    await expect(loadConfig(await configFile({ adminTokens: ['root'], execution: { variables: { lower: 'x' } } }), {})).rejects.toThrow(/variable name/);
+    await expect(loadConfig(await configFile({ adminTokens: ['root'], execution: { variables: { HOST: 1 } } }), {})).rejects.toThrow(/must be a string/);
+    await expect(loadConfig(await configFile({ adminTokens: ['root'], execution: { timeout: 1 } }), {})).rejects.toThrow(/unknown keys/);
+    await expect(loadConfig(undefined, { TD_ADMIN_TOKENS: 'root', TD_EXECUTE: 'on' })).rejects.toThrow(/TD_EXECUTE/);
+    await expect(loadConfig(await configFile({ adminTokens: ['root'], dictionaries: [{ source: { kind: 'file', location: 'x.json' }, execute: 'no' }] }), {})).rejects.toThrow(/execute must be a boolean/);
+  });
+});

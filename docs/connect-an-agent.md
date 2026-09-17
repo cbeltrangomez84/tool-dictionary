@@ -57,7 +57,8 @@ curl -s https://tools.example.com/v1/dictionaries/city-weather/tool
         "properties": {
           "query": { "type": "string", "description": "What you are looking for, in plain language. Empty to see the catalogue." },
           "limit": { "type": "integer", "description": "How many tools to return. Default 8, max 50.", "minimum": 1, "maximum": 50 },
-          "path":  { "type": "string", "description": "Optional category path from the catalogue, e.g. \"tokens/holders\", to search only inside it." }
+          "path":  { "type": "string", "description": "Optional category path from the catalogue, e.g. \"tokens/holders\", to search only inside it." },
+          "dictionary": { "type": "string", "description": "Optional dictionary id. Only needed when several dictionaries are available; when given it must be the one this endpoint serves." }
         },
         "required": ["query"]
       },
@@ -83,8 +84,10 @@ integration. The bundle carries the dictionary ETag and honours `If-None-Match`,
 so poll it cheaply and re-issue the declarations only when it changes.
 
 Fronting several dictionaries? Fetch one bundle each and make the names unique
-(`search_tools_city_weather`), or expose a single `search_tools` with a
-`dictionary` argument and route it yourself.
+(`search_tools_city_weather`), or expose a single `search_tools` and route its
+`dictionary` argument to `POST /v1/search` — the service resolves it, and
+answers `400 dictionary_required` with the list of ids when the model left it
+out and more than one applies.
 
 ## 3. Route the tool call
 
@@ -129,9 +132,50 @@ spec §9.2, with the same `results`, `related` and `budget` fields.
 
 ## 4. Execute the tool the model picked
 
-This is the step the dictionary service **does not do**. The model now knows
-it wants `current_conditions` with `{ "city": "Lisbon" }`. Your backend turns
-the entry into a request and adds the credential:
+The model now knows it wants `current_conditions` with `{ "city": "Lisbon" }`.
+Two ways to run it.
+
+### 4a. Let the service execute (spec §9.7)
+
+When the deployment has execution on ([Run the service](run-the-service.md#execution)),
+the bundle carries a third tool, `execute_tool`, and `"execute": true`. Hand it
+to the model with the other two; its loop becomes *search → execute by name*
+and it never sees a URL. When the model calls it, POST the arguments to its
+`endpoint` with the caller's credential in the header the entry names:
+
+```bash
+curl -s -X POST https://tools.example.com/v1/dictionaries/city-weather/execute \
+  -H 'content-type: application/json' \
+  -H 'x-api-key: the-callers-own-key' \
+  -d '{ "name": "current_conditions", "params": { "city": "Lisbon" }, "format": "text" }'
+```
+
+```
+current_conditions → 200 application/json (52 bytes)
+{
+  "tempC": 21,
+  "sky": "clear",
+  "windKph": 12,
+  "observedAt": "…"
+}
+```
+
+Return that as the tool result. The service validated `params` against the
+entry's schema first (a mismatch is a `400 invalid_params` naming the field —
+return the error message to the model, it knows what to fix), forwarded the
+key only where the entry said it goes, and cut the body to the byte budget if
+it was large (`truncated` tells the model to ask for less). The key was never
+stored or logged; `x-td-var-<VARIABLE>` (e.g. `x-td-var-weather_api_key`) is
+the generic header when the entry places its credential in the query string.
+
+If your agent runtime forwards tool calls as one object, send it as-is: every
+POST route accepts `{ "tool", "input": { …args }, "chatId", "callId" }` and
+reads the arguments from `input` (spec §9.8).
+
+### 4b. Execute it yourself
+
+With execution off — the default — this is the step the service **does not
+do**. Your backend turns the entry into a request and adds the credential:
 
 ```ts
 import { resolveCall } from 'tool-dictionary';

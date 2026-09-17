@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="spec/tool-dictionary-v0.1.md"><img alt="Spec 0.1 draft" src="https://img.shields.io/badge/spec-0.1_draft-5b7cfa"></a>
+  <a href="spec/tool-dictionary-v0.2.md"><img alt="Spec 0.2 draft" src="https://img.shields.io/badge/spec-0.2_draft-5b7cfa"></a>
   <a href="https://github.com/cbeltrangomez84/tool-dictionary/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/cbeltrangomez84/tool-dictionary/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-22c1c3"></a>
   <img alt="Node 20+" src="https://img.shields.io/badge/node-%3E%3D20-333">
@@ -105,21 +105,24 @@ endpoints filled in and the prompt paragraph to go with them.
 |---|---|
 | [Write your first dictionary](docs/write-your-first-dictionary.md) | Three tools by hand, validated, searched. Ten minutes. |
 | [Generate one from OpenAPI](docs/generate-from-openapi.md) | Point the generator at a document, add an overlay, keep it fresh in CI. |
-| [Connect an agent](docs/connect-an-agent.md) | Two HTTP calls to wire a dictionary into any model that can call tools. |
-| [Run the service](docs/run-the-service.md) | Config, tokens, refresh, Docker, what `/health` tells you. |
+| [Connect an agent](docs/connect-an-agent.md) | Two HTTP calls to wire a dictionary into any model that can call tools — three when the service executes for you. |
+| [Run the service](docs/run-the-service.md) | Config, tokens, refresh, execution, Docker, what `/health` tells you. |
 
 ## The specification
 
 | | |
 |---|---|
-| [`spec/tool-dictionary-v0.1.md`](spec/tool-dictionary-v0.1.md) | The normative text: document, relations, index, HTTP API, search semantics, budgets, text rendering, versioning, generation, security, conformance |
+| [`spec/tool-dictionary-v0.2.md`](spec/tool-dictionary-v0.2.md) | The normative text: document, relations, index, HTTP API, execution, search semantics, budgets, text rendering, versioning, generation, security, conformance |
+| [`spec/tool-dictionary-v0.1.md`](spec/tool-dictionary-v0.1.md) | The previous draft, kept for reference; 0.2 amends the service API only |
 | [`spec/schema/dictionary.schema.json`](spec/schema/dictionary.schema.json) | JSON Schema (2020-12) for the document |
 | [`spec/examples/city-weather.dictionary.json`](spec/examples/city-weather.dictionary.json) | The smallest useful dictionary — three tools |
 | [`spec/examples/crypto-data.dictionary.json`](spec/examples/crypto-data.dictionary.json) | Hand-written; the format at its best |
 | [`spec/examples/pool-scout/`](spec/examples/pool-scout/README.md) | An OpenAPI document, an overlay, and the dictionary generated from the two |
 | [`conformance/`](conformance/README.md) | Byte-exact vectors for the text rendering |
 
-Version 0.1 is a draft. Media type `application/vnd.tool-dictionary+json; v=0.1`.
+Version 0.2 is a draft. Media type `application/vnd.tool-dictionary+json; v=0.2`.
+The document format is unchanged since 0.1 (`"toolDictionary": "0.1"`); 0.2 adds
+opt-in execution, `execute_tool`, service-level routes and the request envelope.
 
 ## The reference implementation
 

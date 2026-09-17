@@ -11,8 +11,10 @@ import { DictionaryService, ServiceError } from './service';
 export { generateFromOpenApi, GenerateError, type GenerateOptions, type GenerateResult } from './generate/openapi';
 export { applyOverlay, OverlayError, type Overlay, type OverlayResult } from './generate/overlay';
 export { buildServer, type ServerOptions } from './http/server';
-export { agentBundle, agentTools, systemPrompt, usagePrompt, type DictionaryDescription } from './agent';
-export { DictionaryService, ServiceError } from './service';
+export { agentBundle, agentTools, systemPrompt, usagePrompt, type AgentOptions, type DictionaryDescription } from './agent';
+export { DictionaryService, ServiceError, type RawExecuteRequest } from './service';
+export { Executor, DEFAULT_EXECUTION, declaredOrigins, renderExecuteText, type ExecutionConfig, type ExecuteRequest, type ExecuteResponse, type IncomingHeaders } from './execute';
+export type { ErrorCode } from './errors';
 export { loadDictionary, LoadError, effectiveCall } from './load';
 export { resolveCall, ResolveError, type ResolveOptions, type ResolvedRequest } from './resolve';
 export { validateDictionary } from './validate';
@@ -26,11 +28,13 @@ async function main(): Promise<void> {
     limits: config.limits ?? {},
     threshold: config.threshold ?? {},
     globalAdminTokens: config.adminTokens,
+    ...(config.execution !== undefined ? { execution: config.execution } : {}),
   });
   for (const d of config.dictionaries) {
     const status = await service.install(d);
     const warn = status.warnings ? ` (${status.warnings} warning${status.warnings === 1 ? '' : 's'})` : '';
-    process.stdout.write(`loaded ${status.id} v${status.version} — ${status.entryCount} entries${warn}\n`);
+    const exec = service.executable(status.id) ? ', executes' : '';
+    process.stdout.write(`loaded ${status.id} v${status.version} — ${status.entryCount} entries${warn}${exec}\n`);
     for (const b of status.branches) {
       process.stdout.write(`  branch ${b.path} -> ${b.dictionaryId}: ${b.ok ? `ok, ${b.entryCount} entries` : `DEGRADED: ${b.error}`}\n`);
     }

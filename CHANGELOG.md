@@ -4,6 +4,58 @@ All notable changes to the specification and the reference implementation.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 specification version and the package version move together while 0.x.
 
+## [0.2.0] — 2026-09-17
+
+Service API amendment. The document format is unchanged: every 0.1 dictionary
+is a valid 0.2 dictionary and still says `"toolDictionary": "0.1"`. Everything
+below is opt-in for the deployment and invisible to a consumer that does not
+use it; a server with execution off is exactly a 0.1 server.
+
+### Specification
+- `POST /v1/dictionaries/{id}/execute` (§9.7): the service may run one entry of
+  its own catalogue on the caller's behalf. Validates `params` against the input
+  schema before calling, renders the descriptor, forwards the caller's own
+  credential from the request header (the header the entry names, or the
+  generic `X-Td-Var-<NAME>`), never follows redirects, bounds the call by a
+  deadline and an upstream read cap, and returns the result under the response
+  byte budget. Upstream 4xx/5xx are results, not service errors. New error
+  codes: `execution_disabled`, `not_executable`, `invalid_params`,
+  `missing_credential`, `missing_variable`, `target_not_allowed`,
+  `upstream_redirect`, `upstream_error`, `upstream_timeout`.
+- §16.1 rewritten from "the service never executes" to "the service never holds
+  credentials at rest, and calls only what an installed dictionary declares":
+  the resolved origin must be one of the dictionary's declared origins, with
+  `{{VARIABLE}}` hosts filled from deployment configuration and caller-placed
+  hosts declaring nothing. §16.5 gains the execution caps; §17.2 the matching
+  conformance items.
+- `execute_tool` (§14.5): a third agent-facing tool, `{ name, params,
+  dictionary? }`, declared only where execution is on. `search_tools` gains an
+  optional `dictionary`. The system prompt explains the search → execute loop
+  when the tool is present. The bundle carries `"execute": true|false`.
+- Service-level routes `/v1/search`, `/v1/execute`, `/v1/entries`, `/v1/tool`
+  (§9.8) resolve a `dictionary` argument, or pick the only visible dictionary;
+  several without a name is `400 dictionary_required` listing the ids. The
+  per-dictionary routes accept the argument and reject a mismatch.
+- Request envelope (§9.8): every POST route accepts the bare arguments or
+  `{ "tool", "input": { …args }, "chatId", "callId", … }`, the shape agent
+  runtimes forward.
+- Dictionary list (§9.6) items carry `execute` and, when true, an `execute`
+  endpoint.
+
+### Reference implementation
+- `execution` config block (`enabled`, `maxTimeoutMs`, `defaultTimeoutMs`,
+  `maxResponseBytes`, `variables`) and `TD_EXECUTE=true|false`; per-dictionary
+  `"execute": false` opt-out. Off by default.
+- `Executor` (exported, injectable `fetch`): Ajv validation with schema
+  defaults applied, origin allow-list from `declaredOrigins`, `redirect:
+  'manual'`, `AbortController` deadline, streamed read capped at
+  `maxResponseBytes`, credential redacted from bodies and error messages,
+  exact-budget shaping with `usedBytes` settled to the final byte count.
+- `renderExecuteText` for `format: "text"` results.
+- `/v1/health` reports the execution settings (variable names only).
+- `DictionaryService.execute`, `resolveDictionary`, `executable`.
+- 27 new tests (execution, envelope, agent declarations, config parsing).
+
 ## [0.1.1] — 2026-09-16
 
 ### Reference implementation
@@ -43,4 +95,6 @@ First public draft.
 - Worked example: a fictional liquidity-pool API and the overlay that makes it
   searchable in a caller's words.
 
+[0.2.0]: https://github.com/cbeltrangomez84/tool-dictionary/releases/tag/v0.2.0
+[0.1.1]: https://github.com/cbeltrangomez84/tool-dictionary/releases/tag/v0.1.1
 [0.1.0]: https://github.com/cbeltrangomez84/tool-dictionary/releases/tag/v0.1.0

@@ -17,6 +17,7 @@ One JSON file. Every string may reference an environment variable as
   "trustProxy": true,
   "adminTokens": ["${TD_ADMIN_TOKEN}"],
   "rateLimitPerMinute": 600,
+  "execution": { "enabled": false },
   "dictionaries": [
     {
       "id": "pool-scout",
@@ -27,7 +28,8 @@ One JSON file. Every string may reference an environment variable as
       "id": "city-weather",
       "source": { "kind": "file", "location": "../spec/examples/city-weather.dictionary.json" },
       "readTokens": ["${WEATHER_READ_TOKEN}"],
-      "threshold": { "minScore": 1.0, "relativeFloor": 0.15 }
+      "threshold": { "minScore": 1.0, "relativeFloor": 0.15 },
+      "execute": false
     }
   ]
 }
@@ -39,12 +41,14 @@ One JSON file. Every string may reference an environment variable as
 | `adminTokens` | Bearer tokens that may `PUT` any dictionary, including a new id, and trigger `refresh`. Also `TD_ADMIN_TOKENS`, comma-separated. |
 | `source.kind` | `file` (relative to the config file), `url` (fetched at start and every `refreshIntervalMs`), or `inline`. |
 | `readTokens` | Bearer tokens required to read this dictionary. Empty means public. |
+| `execute` | Per dictionary: `false` keeps this one search-only even when `execution.enabled` is on. Default `true`. |
+| `execution` | Catalogue execution (spec §9.7), off unless `enabled` is `true`. See [Execution](#execution). |
 | `threshold` | When a hit counts as a match: an absolute BM25 floor and a fraction of the top score. Below both, the search returns the index instead. |
 | `limits` | Result and byte caps (`defaultLimit`, `maxLimit`, `defaultMaxBytes`, `maxMaxBytes`, `maxQueryChars`, `searchDeadlineMs`). Defaults are the spec's. |
 | `rateLimitPerMinute` | Per token, or per IP for anonymous callers. `0` disables. |
 | `trustProxy` | Trust `X-Forwarded-For` / `X-Forwarded-Proto` from the peer: `true`, or a comma-separated list of proxy addresses / CIDRs (a hop count is not accepted; Fastify 5 cannot validate the peer from one). Set it whenever a reverse proxy (Caddy, nginx, a load balancer) sits in front, otherwise every anonymous caller shares the proxy's IP and therefore one rate-limit bucket. Also `TD_TRUST_PROXY`. |
 
-`TD_HOST`, `TD_PORT` and `TD_TRUST_PROXY` override the file. `TD_CONFIG` names the file when no
+`TD_HOST`, `TD_PORT`, `TD_TRUST_PROXY` and `TD_EXECUTE` override the file. `TD_CONFIG` names the file when no
 argument is given.
 
 ```bash
@@ -56,6 +60,9 @@ TD_ADMIN_TOKEN=change-me node dist/index.js config/local.json # after npm run bu
 loaded pool-scout v1 — 8 entries
 loaded city-weather v1 — 3 entries
 ```
+
+With execution on, a dictionary the service will run ends its line with
+`, executes`.
 
 A dictionary that fails to load at start is a failed start, on purpose: a 503
 discovered by an agent mid-conversation is the worse outcome.
@@ -76,6 +83,62 @@ Every read endpoint carries the dictionary's ETag and honours `If-None-Match`;
 the ETag is a hash of the document bytes, so it changes exactly when the content
 does, whatever `version` says.
 
+## Execution
+
+Off by default: a fresh install is a search-only service and calls nothing an
+entry describes. Turn it on when you want the agent's loop to be *search →
+execute by name* with the model never handling a URL or a key (spec §9.7):
+
+```json
+{
+  "execution": {
+    "enabled": true,
+    "maxTimeoutMs": 25000,
+    "defaultTimeoutMs": 10000,
+    "maxResponseBytes": 1048576,
+    "variables": { "REGION": "${REGION}" }
+  }
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `enabled` | Also `TD_EXECUTE=true\|false`, which wins over the file. |
+| `maxTimeoutMs` | Hard cap on one upstream call. An entry's `timeoutHintMs` is honoured only below it; `defaultTimeoutMs` applies when the entry has none. Defaults 25 000 / 10 000. |
+| `maxResponseBytes` | The service stops reading an upstream body here (default 1 MiB) and marks the result truncated. Independent of the response `maxBytes` budget, which is applied afterwards. |
+| `variables` | Values for the non-secret `{{VARIABLE}}` references a dictionary declares (a region, a tenant). The credential variable behind `auth.value` is **never** configured here — it arrives with each request. |
+
+What the service does per call: validates `params` against the entry's input
+schema (a mismatch is a 400 naming the field, before anything is sent), renders
+the descriptor, checks the resolved origin against the origins the dictionary
+declares, forwards the caller's credential from the request header (the header
+the entry names, e.g. `x-api-key`, or the generic `x-td-var-<variable>`), sends
+the call without following redirects, reads at most `maxResponseBytes`, and
+returns the upstream's answer — whatever its status — under the byte budget.
+The credential is never stored, logged or echoed.
+
+```bash
+curl -s -X POST localhost:8080/v1/dictionaries/city-weather/execute \
+  -H 'content-type: application/json' -H 'x-api-key: the-callers-own-key' \
+  -d '{ "name": "current_conditions", "params": { "city": "Lisbon" } }'
+```
+
+```json
+{
+  "kind": "result", "dictionary": { "id": "city-weather", "version": 1, "etag": "\"sha256:…\"" },
+  "tool": "current_conditions", "status": 200, "contentType": "application/json",
+  "body": { "tempC": 21, "sky": "clear" }, "bodyFormat": "json",
+  "bytes": 29, "truncated": false, "elapsedMs": 180,
+  "budget": { "maxBytes": 12000, "usedBytes": 262, "truncated": false }
+}
+```
+
+`/v1/execute` (and `/v1/search`, `/v1/entries`, `/v1/tool`) take a
+`dictionary` argument instead of the path id, and pick the only visible
+dictionary when it is omitted. Every POST body is also accepted wrapped as
+`{ "tool", "input": { …args }, "chatId", "callId" }`, the shape agent runtimes
+forward (spec §9.8).
+
 ## What `/v1/health` tells you
 
 ```bash
@@ -87,14 +150,17 @@ curl -s localhost:8080/v1/health
   "ok": true,
   "now": "2026-09-16T10:00:00.000Z",
   "limits": { "defaultLimit": 8, "maxLimit": 50, "defaultMaxBytes": 12000, "maxMaxBytes": 65536, "...": "..." },
+  "execution": { "enabled": false, "maxTimeoutMs": 25000, "defaultTimeoutMs": 10000, "maxResponseBytes": 1048576, "variables": [] },
   "dictionaries": [
-    { "id": "pool-scout", "version": 1, "etag": "\"sha256:…\"", "entryCount": 8, "loaded": true, "stale": false, "public": true, "..." : "..." }
+    { "id": "pool-scout", "version": 1, "etag": "\"sha256:…\"", "entryCount": 8, "loaded": true, "stale": false, "public": true, "execute": false, "..." : "..." }
   ]
 }
 ```
 
 `ok` is process liveness. `stale` per dictionary is the signal to alert on: the
-service is answering, from a copy it could not refresh.
+service is answering, from a copy it could not refresh. `execution.variables`
+lists configured variable *names* only; `execute` per dictionary says whether
+this deployment will run it.
 
 ## As a dependency
 
@@ -102,7 +168,7 @@ The package builds itself on install (`prepare`), so it can be pinned straight
 from git and embedded in another service:
 
 ```bash
-npm install github:cbeltrangomez84/tool-dictionary#v0.1.1
+npm install github:cbeltrangomez84/tool-dictionary#v0.2.0
 ```
 
 ```ts
@@ -136,9 +202,12 @@ or use a `url` source.
 
 ## What it will never do
 
-Execute a tool, or hold a credential. The service knows a dictionary says
-`x-scout-key` goes in a header and is called `{{POOL_SCOUT_API_KEY}}`; it does
-not know the value and has no code path that could send it. Your executor does
-that — see [Connect an agent](connect-an-agent.md). This is the boundary that
-makes it safe to run the service in front of an API you would not expose
-directly (spec §16).
+Hold a credential, or call anything a dictionary does not declare. The service
+knows a dictionary says `x-scout-key` goes in a header and is called
+`{{POOL_SCOUT_API_KEY}}`; it has nowhere to store the value. With execution off
+it has no code path that sends a request an entry describes, and your executor
+does that — see [Connect an agent](connect-an-agent.md). With execution on it
+sends only what an installed entry renders to, only at an origin that
+dictionary declares, and only with the credential the caller handed it for that
+one request. Either way it is safe to run in front of an API you would not
+expose directly (spec §16).

@@ -315,4 +315,6 @@ export interface AgentBundle {
   dictionary: DictionaryStamp & { title: string; summary: string; entryCount: number };
   tools: AgentTool[];
   systemPrompt: string;
+  /** True when `execute_tool` is declared, i.e. this deployment executes the dictionary (spec 14.5). */
+  execute: boolean;
 }

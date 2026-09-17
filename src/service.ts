@@ -9,6 +9,8 @@
  */
 import { readFile } from 'node:fs/promises';
 import { etagOf } from './etag';
+import { ServiceError, type ErrorCode } from './errors';
+import { DEFAULT_EXECUTION, Executor, type ExecuteRequest, type ExecuteResponse, type ExecutionConfig, type IncomingHeaders } from './execute';
 import { loadDictionary, LoadError, type BranchFetcher, type LoadedDictionary } from './load';
 import { buildIndexResponse, buildResultsResponse, decodeCursor, type BuiltResponse } from './render/budget';
 import { renderEntry } from './render/detail';
@@ -32,6 +34,8 @@ import type {
   SearchRequest,
   Suggestion,
 } from './types';
+
+export { ServiceError, type ErrorCode } from './errors';
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -83,6 +87,19 @@ export interface DictionaryConfig {
   threshold?: Partial<ThresholdConfig>;
   /** Overrides `catalog` freshness; seconds. */
   catalogMaxAgeSeconds?: number;
+  /**
+   * Opt this dictionary out of execution (spec 9.7) on a deployment that has
+   * it on. Default true; irrelevant while the deployment keeps execution off.
+   */
+  execute?: boolean;
+}
+
+/** An execute body as it arrives, before anything is trusted about it. */
+export interface RawExecuteRequest {
+  name?: unknown;
+  params?: unknown;
+  maxBytes?: unknown;
+  format?: unknown;
 }
 
 export interface ServiceConfig {
@@ -94,32 +111,10 @@ export interface ServiceConfig {
   /** Admin tokens valid for every dictionary, e.g. for `PUT` of a new id. */
   globalAdminTokens?: string[];
   now?: () => Date;
-}
-
-// ---------------------------------------------------------------------------
-// Errors
-// ---------------------------------------------------------------------------
-
-export type ErrorCode =
-  | 'not_found'
-  | 'entry_not_found'
-  | 'entry_removed'
-  | 'unauthorized'
-  | 'forbidden'
-  | 'version_conflict'
-  | 'invalid_dictionary'
-  | 'not_loaded'
-  | 'no_source';
-
-export class ServiceError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: ErrorCode,
-    message: string,
-    readonly details: unknown[] = [],
-  ) {
-    super(message);
-  }
+  /** Catalogue execution (spec 9.7). Off unless `enabled` is set. */
+  execution?: Partial<ExecutionConfig>;
+  /** The fetch used for upstream calls when executing; injected by tests. */
+  fetch?: typeof fetch;
 }
 
 // ---------------------------------------------------------------------------
@@ -204,8 +199,10 @@ export class DictionaryService {
   private readonly createBackend: () => SearchBackend;
   private readonly globalAdminTokens: Set<string>;
   private readonly now: () => Date;
+  private readonly executor: Executor;
 
   constructor(config: ServiceConfig = {}) {
+    this.executor = new Executor({ ...DEFAULT_EXECUTION, ...config.execution }, config.fetch);
     this.limits = { ...DEFAULT_LIMITS, ...config.limits };
     this.threshold = { ...DEFAULT_THRESHOLD, ...config.threshold };
     this.fetchJson = config.fetchJson ?? defaultFetchJson;
@@ -216,6 +213,12 @@ export class DictionaryService {
 
   get effectiveLimits(): Limits {
     return this.limits;
+  }
+
+  /** Execution settings without the deployment's variable values, for status output. */
+  get executionSummary(): Omit<ExecutionConfig, 'variables'> & { variables: string[] } {
+    const { variables, ...rest } = this.executor.config;
+    return { ...rest, variables: Object.keys(variables).sort() };
   }
 
   // -------------------------------------------------------------------------
@@ -563,6 +566,54 @@ export class DictionaryService {
   // -------------------------------------------------------------------------
 
   /** The category tree, optionally rooted at `path`, budgeted like a search miss. */
+  // -------------------------------------------------------------------------
+  // Execution (spec 9.7)
+  // -------------------------------------------------------------------------
+
+  /** True when this deployment executes and the dictionary has not opted out. */
+  executable(id: string): boolean {
+    return this.executor.config.enabled && this.requireTenant(id).config.execute !== false;
+  }
+
+  /**
+   * Run one catalogue entry on the caller's behalf. `headers` are the incoming
+   * request's; the executor reads only the credential header the entry names.
+   */
+  async execute(id: string, raw: RawExecuteRequest, headers: IncomingHeaders): Promise<ExecuteResponse> {
+    const t = this.requireLoaded(id);
+    if (!this.executable(id)) throw new ServiceError(403, 'execution_disabled', `dictionary "${id}" does not execute on this deployment; call the endpoint the entry describes`);
+    if (typeof raw.name !== 'string' || raw.name.length === 0) throw new ServiceError(400, 'invalid_params', '"name" is required');
+    const entry = t.loaded.byName.get(raw.name);
+    if (!entry) {
+      const tomb = t.tombstones.get(raw.name);
+      if (tomb) throw new ServiceError(404, 'entry_removed', `entry "${raw.name}" was removed in version ${tomb.removedInVersion}`, [tomb]);
+      throw new ServiceError(404, 'entry_not_found', `no entry named "${raw.name}"`);
+    }
+    const params = raw.params === undefined ? {} : raw.params;
+    const request: ExecuteRequest = { name: entry.name, params: params as Record<string, unknown> };
+    if (raw.format === 'text' || raw.format === 'json') request.format = raw.format;
+    const maxBytes = clampBytes(raw.maxBytes, this.limits);
+    const stamp = { id: t.id, version: t.loaded.doc.version, etag: t.loaded.etag };
+    return this.executor.execute(t.loaded.doc, stamp, entry, request, headers, { maxBytes });
+  }
+
+  /**
+   * The dictionary a service-level call means (spec 9.8): the one named, or the
+   * only one the caller can see. Several visible and none named is an error
+   * that lists them, never a silent pick.
+   */
+  resolveDictionary(token: string | undefined, given: unknown): string {
+    if (given !== undefined && given !== null && given !== '') {
+      if (typeof given !== 'string') throw new ServiceError(400, 'dictionary_required', '"dictionary" must be a string id');
+      this.requireTenant(given);
+      return given;
+    }
+    const visible = this.list(token).filter((d) => d.loaded).map((d) => d.id);
+    if (visible.length === 1) return visible[0]!;
+    if (visible.length === 0) throw new ServiceError(404, 'not_found', 'no dictionary is available to this caller');
+    throw new ServiceError(400, 'dictionary_required', `several dictionaries are available; name one in "dictionary": ${visible.join(', ')}`, [{ dictionaries: visible }]);
+  }
+
   index(id: string, options: { path?: string; maxBytes?: number; format?: ResponseFormat } = {}): BuiltResponse<IndexResponse> {
     const t = this.requireLoaded(id);
     const raw: SearchRequest = { query: '' };
@@ -748,3 +799,11 @@ export class DictionaryService {
 
 export { etagOf };
 export type { Entry, LoadedDictionary };
+
+/** The response budget for an execution: the search rule (spec 9.1), silently clamped. */
+function clampBytes(raw: unknown, limits: Limits): number {
+  if (raw === undefined || raw === null) return limits.defaultMaxBytes;
+  const n = Math.trunc(Number(raw));
+  if (!Number.isFinite(n)) return limits.defaultMaxBytes;
+  return Math.min(limits.maxMaxBytes, Math.max(limits.minMaxBytes, n));
+}
