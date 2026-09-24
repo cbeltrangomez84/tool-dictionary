@@ -17,6 +17,7 @@ import { renderEntry } from './render/detail';
 import type { Hit, SearchBackend } from './search/backend';
 import { Bm25Backend } from './search/bm25';
 import { FuzzyIndex } from './search/fuzzy';
+import { tokenize } from './search/normalize';
 import type {
   Dictionary,
   EntriesResponse,
@@ -771,15 +772,25 @@ export class DictionaryService {
     return hits.filter((h) => h.score >= floor);
   }
 
-  /** The synonym-expanded terms that actually contributed, so a human can see why "hodlers" found holders. */
+  /**
+   * The synonym-expanded terms that actually contributed, so a human can see why "hodlers" found holders.
+   *
+   * An equivalent counts only when it appears in the query as whole normalized words (spec 10.2), the
+   * way the backend expands it: a raw substring test read "liquidations" as containing `liq` and
+   * reported `liquidity` for a query the expansion never touched.
+   */
   private interpret(query: string, page: Hit[], dict: LoadedDictionary): string[] | undefined {
     const synonyms = dict.doc.synonyms;
     if (!synonyms || page.length === 0) return undefined;
-    const q = query.toLowerCase();
+    const words = ` ${tokenize(query, { dropStopwords: true }).join(' ')} `;
     const out = new Set<string>();
     for (const [canonical, equivalents] of Object.entries(synonyms)) {
-      const group = [canonical, ...equivalents];
-      if (group.some((term) => term.toLowerCase() !== canonical.toLowerCase() && q.includes(term.toLowerCase()))) out.add(canonical);
+      const own = tokenize(canonical, { dropStopwords: true }).join(' ');
+      const used = equivalents.some((term) => {
+        const normalized = tokenize(term, { dropStopwords: true }).join(' ');
+        return normalized !== '' && normalized !== own && words.includes(` ${normalized} `);
+      });
+      if (used) out.add(canonical);
     }
     return out.size ? [...out] : undefined;
   }

@@ -47,6 +47,15 @@ describe('Bm25Backend coordination factor', () => {
     await backend.close();
   });
 
+  it('a multi-word synonym holding a stopword still expands', async () => {
+    const backend = new Bm25Backend();
+    const pnl = entry('wallet_pnl', 'Realized gains of a wallet', ['pnl', 'wallet']);
+    await backend.index([...ENTRIES, pnl], { pnl: ['profit and loss'] });
+    const [hit] = await backend.search('profit and loss', { limit: 1 });
+    expect(hit?.name).toBe('wallet_pnl');
+    await backend.close();
+  });
+
   it('single-word queries are unaffected by coverage', async () => {
     const backend = new Bm25Backend();
     await backend.index(ENTRIES);

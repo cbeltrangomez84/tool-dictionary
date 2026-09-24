@@ -51,6 +51,18 @@ describe('DictionaryService.search', () => {
     expect(r.query.interpretedAs).toContain('holder');
   });
 
+  it('reports a synonym only when it appears as whole words, the way the expansion reads it', async () => {
+    const s = await serviceWithExample();
+    // "help" contains the letters of the `lp` synonym and "mcaps" those of `mcap`; neither is the word.
+    const { response } = await s.search('crypto-data', { query: 'help with the token price' });
+    const r = response as ResultsResponse;
+    expect(r.kind).toBe('results');
+    expect(r.query.interpretedAs ?? []).not.toContain('liquidity pool');
+
+    const multi = (await s.search('crypto-data', { query: 'profit and loss of a wallet' })).response as ResultsResponse;
+    expect(multi.query.interpretedAs).toContain('pnl');
+  });
+
   it('returns the index with suggestions on a miss, never an empty list', async () => {
     const s = await serviceWithExample();
     const { response } = await s.search('crypto-data', { query: 'weather forecast bogota' });

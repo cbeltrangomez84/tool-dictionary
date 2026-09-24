@@ -71,7 +71,9 @@ export class Synonyms {
 
   constructor(table: Record<string, string[]> = {}) {
     for (const [canonical, equivalents] of Object.entries(table)) {
-      const members = [canonical, ...equivalents].map((term) => tokenize(term).join(' ')).filter(Boolean);
+      // Tokenized the way a query is, stopwords dropped: "profit and loss" must meet the query's
+      // "profit loss", or a multi-word synonym holding a stopword never expands.
+      const members = [canonical, ...equivalents].map((term) => tokenize(term, { dropStopwords: true }).join(' ')).filter(Boolean);
       const group = new Set(members);
       for (const member of members) {
         const existing = this.groups.get(member);
