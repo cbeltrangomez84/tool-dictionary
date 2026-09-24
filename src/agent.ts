@@ -88,6 +88,7 @@ export function systemPrompt(dictionary: DictionaryDescription, options: AgentOp
     `You have access to a tool dictionary covering ${dictionary.summary.trim().replace(/\.$/, '')}. ` +
     'When a question needs data you do not have, search it before answering. Search with the user\'s own words. ' +
     'Read the "see also" lines: they frequently name the tool you actually wanted. ' +
+    'When a tool has a BRIEF, call the brief: it answers the same question in a response that fits your context; use the full tool only when you need all of its data. ' +
     'If you would rather see everything at once, list the tools; each line is a name you can search for exactly.' +
     (options.execute ? ' ' + EXECUTE_GUIDANCE : '')
   );

@@ -13,9 +13,9 @@ or a credential.
 
 ### Changes from 0.1
 
-0.2 amends the service API and the agent-facing surface. **The document format
-is unchanged**: a 0.2 server serves documents with `toolDictionary: "0.1"`, and
-every 0.1 document is a valid 0.2 document. Nothing that 0.1 required is
+0.2 amends the service API and the agent-facing surface. The document format
+gains one optional entry field, `briefOf`; a 0.2 server serves documents with
+`toolDictionary: "0.1"`, and every 0.1 document is a valid 0.2 document. Nothing that 0.1 required is
 removed; every addition is opt-in for the deployment and invisible to a consumer
 that does not use it.
 
@@ -36,6 +36,10 @@ that does not use it.
 * **Request envelope** ([§9.8](#98-service-level-routes-and-the-request-envelope)):
   POST bodies are accepted either as the arguments themselves or wrapped as
   `{ "tool", "input": { …args }, … }`, the shape agent runtimes forward.
+* **Briefs** ([§5.6](#56-briefs)): an entry MAY declare `briefOf`, naming the
+  entry whose question it answers in a compact response. The server sets the
+  other side's `brief`, both render at `summary` detail, and the system prompt
+  tells the agent to call the brief first.
 
 The key words MUST, MUST NOT, REQUIRED, SHALL, SHOULD, SHOULD NOT, RECOMMENDED,
 MAY and OPTIONAL are to be interpreted as described in RFC 2119.
@@ -352,6 +356,7 @@ serve it compressed.
 | `latencyHintMs` | integer | no | Typical, not guaranteed. |
 | `examples` | array | no | ≤ 4 items, `{ "input": {...}, "note": "..." }`. Carried at `full` only. |
 | `aliases` | string[] | no | Former names. Searchable; resolvable by `/entries/{name}` ([§13.4](#134-renaming-and-removal)). |
+| `briefOf` | string | no | Name of the entry of this dictionary whose question this one answers in a compact response ([§5.6](#56-briefs)). Its counterpart `brief` is set by the server and never authored. |
 | `extensions` | object | no | |
 
 ### 5.2 Writing a good `summary`
@@ -470,6 +475,30 @@ The rules:
 The reference implementation ships the executor half as `resolveCall(entry,
 dictionary, { input, variables })` → `{ method, url, headers, body }`, so that a
 consumer does not re-derive the substitution and encoding rules.
+
+### 5.6 Briefs
+
+Some answers are too large for a model's context: a chart's full grid, a long
+history, a whole order book. A producer that also offers a compact answer to
+the same question — the strongest levels, the latest points, the top of the
+book — publishes it as a separate entry and marks it with `briefOf`, naming
+the full entry. The agent then has one rule: when a tool has a brief, call the
+brief, and reach for the full tool only when it needs all of the data.
+
+1. `briefOf` names an entry of the same dictionary, never the entry itself and
+   never another dictionary's entry.
+2. One level only: the named entry MUST NOT itself carry `briefOf`, and an
+   entry has at most one brief. Two briefs of one tool would leave the agent to
+   guess; a brief of a brief would point at a tool the agent never reaches.
+3. A **server MUST set `brief`** on the named entry at load time, to the name
+   of the entry that declared `briefOf`, replacing any `brief` the document
+   carries. A producer never writes `brief`: one direction is authored, so the
+   two sides cannot disagree.
+4. Both fields render from `summary` detail up ([§11.4](#114-text-rendering)):
+   which of the two tools to call is exactly the decision that level exists for.
+5. When a branch merge renames the named entry ([§8.1](#81-resolution)), the
+   `briefOf` that names it is renamed with it. When an overlay hides the named
+   entry ([§15.2](#152-overlays)), the brief stays and loses its `briefOf`.
 
 ## 6. Relations
 
@@ -1266,6 +1295,8 @@ A `<result>` block, where `i` counts from 1:
 [IND<summary>]
 [INDDEPRECATED | INDBETA]                 ← when `stability` is present and not "stable"
 [INDRISK: <risk>]                         ← when `risk` is present and not "read"
+[INDBRIEF of <briefOf>: the same answer in a compact response; prefer this one]
+[INDBRIEF: <brief> answers this compactly; prefer it unless you need the full data]
 [INDpath: <path>]
 ── the next seven lines only when `detail` is "full" ──
 [IND<description>]
@@ -1588,8 +1619,10 @@ Non-normative, but implementations SHOULD ship this text with the tool:
 > You have access to a tool dictionary covering *{dictionary.summary}*. When a
 > question needs data you do not have, search it before answering. Search with
 > the user's own words. Read the "see also" lines: they frequently name the tool
-> you actually wanted. If you would rather see everything at once, list the
-> tools; each line is a name you can search for exactly.
+> you actually wanted. When a tool has a BRIEF, call the brief: it answers the
+> same question in a response that fits your context; use the full tool only
+> when you need all of its data. If you would rather see everything at once,
+> list the tools; each line is a name you can search for exactly.
 
 The last sentence is present only when `list_tools` is exposed. When
 `execute_tool` is exposed the paragraph continues:
@@ -1960,6 +1993,8 @@ Validates against `spec/schema/dictionary.schema.json` and satisfies:
    `secret` variable is referenced only from `auth.value`; `auth.value`
    references a `secret` variable; a placement (`in`/`name`/`value`) is complete,
    on `kind: "caller"`, and on an `http` call ([§5.5](#55-variables)).
+9. Every `briefOf` names another entry of the same dictionary that carries no
+   `briefOf` of its own, and no two entries name the same one ([§5.6](#56-briefs)).
 
 ### 17.2 A conforming server
 
@@ -1969,7 +2004,8 @@ Validates against `spec/schema/dictionary.schema.json` and satisfies:
    ([§12](#12-empty-and-no-match-queries)).
 3. Never exceeds `maxBytes`, and degrades in the order of
    [§11.3](#113-degradation-order).
-4. Materializes inverse relations ([§6.2](#62-inverse-materialization)).
+4. Materializes inverse relations ([§6.2](#62-inverse-materialization)) and
+   `brief` ([§5.6](#56-briefs)).
 5. Returns `related` by default.
 6. Emits canonical ETags ([§13.2](#132-etag)) and honours `If-None-Match`.
 7. Calls an entry's endpoint only through `POST /execute`, only when the

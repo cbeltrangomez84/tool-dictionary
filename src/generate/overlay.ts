@@ -29,6 +29,7 @@ export interface EntryOverlay {
   latencyHintMs?: number;
   examples?: Entry['examples'];
   input?: Entry['input'];
+  briefOf?: string;
   keywords?: ListPatch<string> | string[];
   aliases?: ListPatch<string> | string[];
   /** `remove` matches by target (and type when given). */
@@ -128,7 +129,7 @@ export function applyOverlay(generated: Dictionary, rawOverlay: unknown): Overla
 
   const byName = new Map(dictionary.entries.map((e) => [e.name, e]));
   const applyEntryPatch = (entry: Entry, patch: EntryOverlay, at: string) => {
-    for (const key of ['title', 'summary', 'description', 'path', 'returns', 'risk', 'stability', 'deprecation', 'cost', 'latencyHintMs', 'examples', 'input', 'extensions'] as const) {
+    for (const key of ['title', 'summary', 'description', 'path', 'returns', 'risk', 'stability', 'deprecation', 'cost', 'latencyHintMs', 'examples', 'input', 'briefOf', 'extensions'] as const) {
       if (patch[key] !== undefined) (entry as unknown as Record<string, unknown>)[key] = patch[key];
     }
     const keywords = patchList(entry.keywords, patch.keywords, sameString);
@@ -198,6 +199,10 @@ export function applyOverlay(generated: Dictionary, rawOverlay: unknown): Overla
     for (const entry of dictionary.entries) {
       if (entry.relations) entry.relations = entry.relations.filter((r) => !hide.has(r.target));
       if (entry.deprecation?.replacedBy && hide.has(entry.deprecation.replacedBy)) delete entry.deprecation.replacedBy;
+      if (entry.briefOf !== undefined && hide.has(entry.briefOf)) {
+        issues.push({ at: `entries "${entry.name}".briefOf`, message: `"${entry.briefOf}" is hidden; the brief is kept, without briefOf` });
+        delete entry.briefOf;
+      }
     }
     for (const node of nodes) if (node.examples) node.examples = node.examples.filter((n) => !hide.has(n));
   }

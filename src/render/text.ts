@@ -63,6 +63,8 @@ function renderResult(entry: RenderedEntry, n: number): string[] {
   if (entry.stability === 'deprecated') lines.push(`${IND}DEPRECATED`);
   else if (entry.stability === 'beta') lines.push(`${IND}BETA`);
   if (entry.risk && entry.risk !== 'read') lines.push(`${IND}RISK: ${entry.risk}`);
+  if (entry.briefOf) lines.push(`${IND}BRIEF of ${entry.briefOf}: the same answer in a compact response; prefer this one`);
+  if (entry.brief) lines.push(`${IND}BRIEF: ${entry.brief} answers this compactly; prefer it unless you need the full data`);
   if (entry.path) lines.push(`${IND}path: ${entry.path}`);
   if (entry.detail === 'full') {
     if (entry.description) lines.push(`${IND}${entry.description}`);

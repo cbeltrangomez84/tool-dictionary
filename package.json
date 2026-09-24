@@ -1,6 +1,6 @@
 {
   "name": "tool-dictionary",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A portable format for describing thousands of callable tools, and a service that lets an agent search it — so it finds the two or three it needs without loading the rest.",
   "keywords": [
     "tool-dictionary",

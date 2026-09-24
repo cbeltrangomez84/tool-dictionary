@@ -4,6 +4,23 @@ All notable changes to the specification and the reference implementation.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 specification version and the package version move together while 0.x.
 
+## [0.2.1] — 2026-09-24
+
+### Specification
+- Briefs (§5.6): an entry may declare `briefOf`, naming the entry of the same
+  dictionary whose question it answers in a compact response. The server
+  materializes the other side's `brief`; both render at `summary` detail as
+  `BRIEF` lines (§11.4), and the system prompt (§14.2) tells the agent to call
+  the brief first. One level only, one brief per entry (§17.1 rule 9). The field
+  is additive: every 0.2.0 document is still valid.
+
+### Reference implementation
+- Validation, load-time `brief` materialization, branch-merge renames and the
+  overlay's `briefOf` patch key; hiding the full entry drops the brief's
+  `briefOf` with an issue.
+- `interpretedAs` reports a synonym only on a whole-word match, and multi-word
+  synonym members expand (they are tokenized like the query).
+
 ## [0.2.0] — 2026-09-17
 
 Service API amendment. The document format is unchanged: every 0.1 dictionary

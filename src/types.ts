@@ -124,6 +124,14 @@ export interface Entry {
   latencyHintMs?: number;
   examples?: EntryExample[];
   aliases?: string[];
+  /**
+   * This entry answers the same question as the named entry of this dictionary,
+   * in a response small enough for a model's context: an agent should prefer it
+   * and reach for the named entry only when it needs the full data (spec 5.6).
+   */
+  briefOf?: string;
+  /** Server-set from the other side's `briefOf`: the entry that is this one's brief. Never authored. */
+  brief?: string;
   extensions?: Record<string, unknown>;
 }
 
@@ -240,6 +248,10 @@ export interface RenderedEntry {
   stability?: Stability;
   cost?: { tier?: CostTier; note?: string };
   examples?: EntryExample[];
+  /** This entry is the compact answer of the named entry; prefer it (spec 5.6). */
+  briefOf?: string;
+  /** The named entry answers this one's question in a compact response; prefer it unless the full data is needed. */
+  brief?: string;
   /** Only on `related` items: which result it hangs off, and why. */
   via?: { from: string; type: RelationType; reason: string };
 }

@@ -50,6 +50,9 @@ export function renderEntry(entry: Entry, dict: Dictionary, level: DetailLevel, 
   // that one of them writes, or is deprecated.
   if (entry.stability && entry.stability !== 'stable') out.stability = entry.stability;
   if (entry.risk && entry.risk !== 'read') out.risk = entry.risk;
+  // Also at `summary`: which of two tools to call is the decision this level exists for.
+  if (entry.briefOf !== undefined) out.briefOf = entry.briefOf;
+  if (entry.brief !== undefined) out.brief = entry.brief;
   if (level === 'summary') return out;
 
   if (entry.description) {

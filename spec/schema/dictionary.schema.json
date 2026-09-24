@@ -232,6 +232,14 @@
           "maxItems": 8,
           "description": "Former names. Searchable and resolvable; see spec 13.4."
         },
+        "briefOf": {
+          "$ref": "#/$defs/entryName",
+          "description": "The entry of this dictionary whose question this one answers in a compact response; see spec 5.6."
+        },
+        "brief": {
+          "$ref": "#/$defs/entryName",
+          "description": "Server-set from the other entry's briefOf; a producer never writes it, and a server replaces whatever it finds."
+        },
         "extensions": { "type": "object" }
       },
       "allOf": [
