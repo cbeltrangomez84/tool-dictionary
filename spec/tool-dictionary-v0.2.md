@@ -1001,6 +1001,12 @@ Headers: `Cache-Control: no-store`, `X-Budget-Used-Bytes`, `X-Budget-Truncated`,
 `X-Upstream-Status`. Results are never cached by the service and never carry an
 ETag.
 
+A deployment MAY relay metering headers: response headers the upstream uses to
+report what a call cost. Each one it names is then set on every service
+response, carrying the sum of the numeric values the upstream calls of that
+request reported (`0` when there were none, or the upstream sent no usable
+value). Upstream response headers are otherwise never passed through.
+
 With `format: "text"` the body is `text/plain`: one header line, then the body
 as-is (JSON pretty-printed, two-space indent):
 

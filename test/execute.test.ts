@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildServer } from '../src/http/server';
 import { DictionaryService, ServiceError } from '../src/service';
-import { declaredOrigins, renderExecuteText } from '../src/execute';
+import { declaredOrigins, meteringValue, recordMetering, renderExecuteText, type Meter } from '../src/execute';
 import { example, nftDictionary } from './helpers';
 
 /** A fetch double: records every upstream call, answers from a script, never touches the network. */
@@ -306,7 +306,7 @@ describe('execute (spec 9.7)', () => {
     expect(byId['nft-data'].endpoints.execute).toBeUndefined();
 
     const health = await app.inject({ method: 'GET', url: '/v1/health' });
-    expect(health.json().execution).toEqual({ enabled: true, maxTimeoutMs: 200, defaultTimeoutMs: 100, maxResponseBytes: 512, variables: [] });
+    expect(health.json().execution).toEqual({ enabled: true, maxTimeoutMs: 200, defaultTimeoutMs: 100, maxResponseBytes: 512, variables: [], meteringHeaders: [] });
   });
 
   it('refuses a target the dictionary did not declare: a caller-chosen host never executes', async () => {
@@ -372,5 +372,109 @@ describe('execute (spec 9.7)', () => {
 
   it('ServiceError carries the execute codes', () => {
     expect(new ServiceError(403, 'execution_disabled', 'x').code).toBe('execution_disabled');
+  });
+});
+
+describe('execute: metering headers', () => {
+  const METERED = 'x-credits-used';
+  const upstream = fakeFetch();
+  let app: FastifyInstance;
+  let plain: FastifyInstance;
+  let service: DictionaryService;
+  let unmetered: DictionaryService;
+
+  const answer = (status: number, credits?: string) =>
+    upstream.answer(() => new Response('{"ok":true}', { status, headers: { 'content-type': 'application/json', ...(credits !== undefined ? { [METERED]: credits } : {}) } }));
+  const execute = (target: FastifyInstance = app) =>
+    target.inject({ method: 'POST', url: '/v1/dictionaries/crypto-data/execute', headers: { 'x-api-key': KEY }, payload: { name: 'holders_count', params: { address: 'So111' } } });
+
+  beforeAll(async () => {
+    service = new DictionaryService({ execution: { enabled: true, meteringHeaders: [METERED] }, fetch: upstream.impl });
+    await service.install({ source: { kind: 'inline' } }, example());
+    app = buildServer({ service, rateLimitPerMinute: 0 });
+    unmetered = new DictionaryService({ execution: { enabled: true }, fetch: upstream.impl });
+    await unmetered.install({ source: { kind: 'inline' } }, example());
+    plain = buildServer({ service: unmetered, rateLimitPerMinute: 0 });
+    await Promise.all([app.ready(), plain.ready()]);
+  });
+  afterAll(async () => {
+    await Promise.all([app.close(), plain.close()]);
+    await Promise.all([service.close(), unmetered.close()]);
+  });
+
+  it('relays the upstream value on the execute response', async () => {
+    answer(200, '3');
+    const res = await execute();
+    expect(res.statusCode).toBe(200);
+    // MUTATION CHECK: not passing the meter into service.execute leaves this at "0".
+    expect(res.headers[METERED]).toBe('3');
+  });
+
+  it('relays it for a non-2xx upstream answer too — the upstream decides what that cost', async () => {
+    answer(404, '0');
+    const res = await execute();
+    expect(res.json().status).toBe(404);
+    expect(res.headers[METERED]).toBe('0');
+    answer(503, '2');
+    expect((await execute()).headers[METERED]).toBe('2');
+  });
+
+  it('is "0" when the upstream sent no such header, or a value that is not a number', async () => {
+    answer(200);
+    expect((await execute()).headers[METERED]).toBe('0');
+    for (const bad of ['', 'abc', '-1', '1e3', '0x10', 'NaN']) {
+      answer(200, bad);
+      expect((await execute()).headers[METERED], bad).toBe('0');
+    }
+  });
+
+  it('is "0" when the upstream call never answered', async () => {
+    upstream.answer(() => Promise.reject(new TypeError('connect ECONNREFUSED')));
+    const res = await execute();
+    expect(res.statusCode).toBeGreaterThanOrEqual(400);
+    expect(res.headers[METERED]).toBe('0');
+  });
+
+  it('is "0" on every response that makes no upstream call: search, entries, health, a refused execute, a 404, a 429', async () => {
+    upstream.calls.length = 0;
+    const search = await app.inject({ method: 'POST', url: '/v1/dictionaries/crypto-data/search', payload: { query: 'holders' } });
+    expect(search.statusCode).toBe(200);
+    // MUTATION CHECK: setting the header only in handleExecute leaves search without it.
+    expect(search.headers[METERED]).toBe('0');
+    expect((await app.inject({ method: 'GET', url: '/v1/dictionaries/crypto-data/entries' })).headers[METERED]).toBe('0');
+    expect((await app.inject({ method: 'GET', url: '/v1/health' })).headers[METERED]).toBe('0');
+    const refused = await app.inject({ method: 'POST', url: '/v1/dictionaries/crypto-data/execute', payload: { name: 'holders_count', params: { address: 'So111' } } });
+    expect(refused.statusCode).toBe(401);
+    expect(refused.headers[METERED]).toBe('0');
+    expect((await app.inject({ method: 'GET', url: '/nope' })).headers[METERED]).toBe('0');
+    expect(upstream.calls).toHaveLength(0);
+
+    const limited = buildServer({ service, rateLimitPerMinute: 1 });
+    await limited.inject({ method: 'GET', url: '/v1/health' });
+    const res429 = await limited.inject({ method: 'GET', url: '/v1/health' });
+    expect(res429.statusCode).toBe(429);
+    expect(res429.headers[METERED]).toBe('0');
+    await limited.close();
+  });
+
+  it('is absent when the deployment configured no metering headers', async () => {
+    answer(200, '3');
+    const res = await execute(plain);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers[METERED]).toBeUndefined();
+  });
+
+  it('recordMetering sums every upstream response into one tally per header', () => {
+    const meter: Meter = new Map();
+    const names = [METERED, 'x-units'];
+    recordMetering(meter, names, new Headers({ [METERED]: '2', 'x-units': '0.5' }));
+    recordMetering(meter, names, new Headers({ [METERED]: ' 3 ' }));
+    recordMetering(meter, names, new Headers({ [METERED]: 'garbage', 'x-units': '0.25' }));
+    // MUTATION CHECK: replacing (set) instead of adding keeps only the last call's value.
+    expect(meteringValue(meter, METERED)).toBe('5');
+    expect(meteringValue(meter, 'x-units')).toBe('0.75');
+    expect(meteringValue(meter, 'x-other')).toBe('0');
+    expect(meteringValue(undefined, METERED)).toBe('0');
+    recordMetering(undefined, names, new Headers({ [METERED]: '9' }));
   });
 });

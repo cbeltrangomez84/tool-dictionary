@@ -32,6 +32,15 @@ export interface ExecutionConfig {
    * always comes from the request.
    */
   variables: Record<string, string>;
+  /**
+   * Response headers, lower-cased, in which the upstream reports what one call
+   * cost (credits, units). The service relays each one on every response it
+   * sends: on an execute, the sum of what the upstream calls it made reported;
+   * everywhere else, and when the upstream did not send it, `0`. A metering
+   * consumer billing through the service then reads the same header it would
+   * read calling the API directly.
+   */
+  meteringHeaders: string[];
 }
 
 export const DEFAULT_EXECUTION: ExecutionConfig = {
@@ -40,7 +49,34 @@ export const DEFAULT_EXECUTION: ExecutionConfig = {
   defaultTimeoutMs: 10_000,
   maxResponseBytes: 1_048_576,
   variables: {},
+  meteringHeaders: [],
 };
+
+/**
+ * Per-request tally of the metering headers: header name to the sum of what
+ * every upstream call made for that request reported. Created by the HTTP
+ * layer, filled by the executor, read back when the response is sent.
+ */
+export type Meter = Map<string, number>;
+
+/** A metering value the service will add up: a plain non-negative decimal. */
+const METERING_VALUE = /^\d+(\.\d+)?$/;
+
+/** Adds what one upstream response reported to `meter`; a missing or malformed value adds nothing. */
+export function recordMetering(meter: Meter | undefined, names: readonly string[], headers: Headers): void {
+  if (!meter) return;
+  for (const name of names) {
+    const raw = headers.get(name)?.trim();
+    const value = raw !== undefined && METERING_VALUE.test(raw) ? Number(raw) : 0;
+    meter.set(name, (meter.get(name) ?? 0) + value);
+  }
+}
+
+/** The header value for one metered name: the sum, `0` when nothing was reported, no float noise. */
+export function meteringValue(meter: Meter | undefined, name: string): string {
+  const total = meter?.get(name) ?? 0;
+  return String(Math.round(total * 1e6) / 1e6);
+}
 
 export interface ExecuteRequest {
   name: string;
@@ -90,14 +126,20 @@ export class Executor {
   private readonly fetchImpl: typeof fetch;
 
   constructor(config: Partial<ExecutionConfig> = {}, fetchImpl: typeof fetch = fetch) {
-    this.config = { ...DEFAULT_EXECUTION, ...config, variables: { ...(config.variables ?? {}) } };
+    this.config = {
+      ...DEFAULT_EXECUTION,
+      ...config,
+      variables: { ...(config.variables ?? {}) },
+      meteringHeaders: (config.meteringHeaders ?? []).map((h) => h.toLowerCase()),
+    };
     addFormats(this.ajv);
     this.fetchImpl = fetchImpl;
   }
 
   /**
    * Run `entry` from `dictionary`. `headers` are the incoming request's; only
-   * the credential header the entry declares is read from them.
+   * the credential header the entry declares is read from them. `meter`, when
+   * given, collects the upstream's metering headers.
    */
   async execute(
     dictionary: Dictionary,
@@ -106,6 +148,7 @@ export class Executor {
     request: ExecuteRequest,
     headers: IncomingHeaders,
     budget: { maxBytes: number },
+    meter?: Meter,
   ): Promise<ExecuteResponse> {
     const call = effectiveCall(entry, dictionary);
     if (call.type !== 'http') {
@@ -136,7 +179,7 @@ export class Executor {
     const timeoutMs = Math.min(call.timeoutHintMs ?? this.config.defaultTimeoutMs, this.config.maxTimeoutMs);
     const secrets = credential ? [credential.value] : [];
     const started = Date.now();
-    const upstream = await this.fetchUpstream(entry, resolved, timeoutMs, secrets);
+    const upstream = await this.fetchUpstream(entry, resolved, timeoutMs, secrets, meter);
     const elapsedMs = Date.now() - started;
 
     return shape(stamp, entry, upstream, elapsedMs, budget.maxBytes, secrets);
@@ -205,7 +248,7 @@ export class Executor {
     }
   }
 
-  private async fetchUpstream(entry: Entry, resolved: ResolvedRequest, timeoutMs: number, secrets: string[]) {
+  private async fetchUpstream(entry: Entry, resolved: ResolvedRequest, timeoutMs: number, secrets: string[], meter?: Meter) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -221,6 +264,9 @@ export class Executor {
         if (controller.signal.aborted) throw new ServiceError(504, 'upstream_timeout', `"${entry.name}" did not answer within ${timeoutMs} ms`, [{ timeoutMs }]);
         throw new ServiceError(502, 'upstream_error', `"${entry.name}" could not be reached: ${redact(errorMessage(error), secrets)}`, []);
       }
+      // Whatever the upstream answered, it answered: what it says the call cost is
+      // counted before any of the checks below can turn the result into an error.
+      recordMetering(meter, this.config.meteringHeaders, response.headers);
       if (response.status >= 300 && response.status < 400) {
         throw new ServiceError(502, 'upstream_redirect', `"${entry.name}" answered ${response.status}; redirects are not followed`, [{ status: response.status }]);
       }

@@ -62,4 +62,15 @@ describe('config: execution (spec 9.7)', () => {
     await expect(loadConfig(undefined, { TD_ADMIN_TOKENS: 'root', TD_EXECUTE: 'on' })).rejects.toThrow(/TD_EXECUTE/);
     await expect(loadConfig(await configFile({ adminTokens: ['root'], dictionaries: [{ source: { kind: 'file', location: 'x.json' }, execute: 'no' }] }), {})).rejects.toThrow(/execute must be a boolean/);
   });
+
+  it('meteringHeaders: lower-cased and de-duplicated; not an array, not a header name, or a header the service owns fails at start', async () => {
+    const file = await configFile({ adminTokens: ['root'], execution: { meteringHeaders: ['X-Credits-Used', 'x-credits-used', 'x-units'] } });
+    expect((await loadConfig(file, {})).execution).toEqual({ meteringHeaders: ['x-credits-used', 'x-units'] });
+    await expect(loadConfig(await configFile({ adminTokens: ['root'], execution: { meteringHeaders: 'x-credits-used' } }), {})).rejects.toThrow(/array of header names/);
+    await expect(loadConfig(await configFile({ adminTokens: ['root'], execution: { meteringHeaders: ['x credits'] } }), {})).rejects.toThrow(/not a header name/);
+    await expect(loadConfig(await configFile({ adminTokens: ['root'], execution: { meteringHeaders: [7] } }), {})).rejects.toThrow(/not a header name/);
+    for (const owned of ['Content-Length', 'content-type', 'cache-control', 'etag', 'retry-after', 'x-upstream-status', 'x-budget-used-bytes', 'access-control-allow-origin', 'set-cookie']) {
+      await expect(loadConfig(await configFile({ adminTokens: ['root'], execution: { meteringHeaders: [owned] } }), {})).rejects.toThrow(/sets itself/);
+    }
+  });
 });

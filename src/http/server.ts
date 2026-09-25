@@ -6,7 +6,7 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, type FastifyServerOptions } from 'fastify';
 import { agentBundle, usagePrompt } from '../agent';
 import { etagMatches } from '../etag';
-import { renderExecuteText } from '../execute';
+import { meteringValue, renderExecuteText, type Meter } from '../execute';
 import { renderEntriesText } from '../render/text';
 import { DictionaryService, ServiceError, type Access, type RawExecuteRequest } from '../service';
 import type { SearchRequest } from '../types';
@@ -49,6 +49,13 @@ function errorBody(error: ServiceError) {
 }
 
 type Params = { id: string; name?: string };
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    /** Metering headers reported by the upstream calls this request made (see `meteringHeaders`). */
+    meter?: Meter;
+  }
+}
 
 /**
  * Request bodies arrive either as the arguments themselves or wrapped in an
@@ -121,6 +128,17 @@ export function buildServer(options: ServerOptions): FastifyInstance {
   });
 
   app.setNotFoundHandler((_request, reply) => reply.status(404).send({ error: { code: 'not_found', message: 'no such route', details: [] } }));
+
+  // Metering headers go on EVERY response — search, a 404, a 429, an execute
+  // that failed before calling out — so a consumer billing by them never has to
+  // tell "free" from "not reported". Only an upstream call adds to the tally.
+  const metered = service.meteringHeaders;
+  if (metered.length > 0) {
+    app.addHook('onSend', async (request, reply, payload) => {
+      for (const name of metered) reply.header(name, meteringValue(request.meter, name));
+      return payload;
+    });
+  }
 
   app.addHook('onRequest', async (request, reply) => {
     const key = bearer(request) ?? request.ip;
@@ -305,7 +323,8 @@ export function buildServer(options: ServerOptions): FastifyInstance {
   const handleExecute = async (request: FastifyRequest<{ Querystring?: { format?: string } }>, reply: FastifyReply, id: string, body: Record<string, unknown>) => {
     guard(request, id, 'read');
     const raw: RawExecuteRequest = { name: body.name, params: body.params, maxBytes: body.maxBytes, format: body.format ?? request.query?.format };
-    const result = await service.execute(id, raw, request.headers);
+    request.meter = new Map();
+    const result = await service.execute(id, raw, request.headers, request.meter);
     reply.header('cache-control', 'no-store');
     reply.header('x-budget-used-bytes', String(result.budget.usedBytes));
     reply.header('x-budget-truncated', String(result.budget.truncated));

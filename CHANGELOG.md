@@ -4,6 +4,20 @@ All notable changes to the specification and the reference implementation.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 specification version and the package version move together while 0.x.
 
+## [0.2.2] — 2026-09-24
+
+### Specification
+- Execute response (§9.7.2): a deployment may relay metering headers, the
+  headers an upstream uses to report what a call cost. Optional and
+  deployment-side; no document or request changes.
+
+### Reference implementation
+- `execution.meteringHeaders`: each named header is summed over the upstream
+  calls a request makes and set on every response — the total on execute, `0`
+  everywhere else (search, entries, health, errors, 429). Missing or
+  non-numeric upstream values count as `0`; headers the service owns are
+  refused at start. `/v1/health` lists the names.
+
 ## [0.2.1] — 2026-09-24
 
 ### Specification

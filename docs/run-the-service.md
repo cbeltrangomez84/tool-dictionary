@@ -96,7 +96,8 @@ execute by name* with the model never handling a URL or a key (spec §9.7):
     "maxTimeoutMs": 25000,
     "defaultTimeoutMs": 10000,
     "maxResponseBytes": 1048576,
-    "variables": { "REGION": "${REGION}" }
+    "variables": { "REGION": "${REGION}" },
+    "meteringHeaders": ["x-credits-used"]
   }
 }
 ```
@@ -107,6 +108,7 @@ execute by name* with the model never handling a URL or a key (spec §9.7):
 | `maxTimeoutMs` | Hard cap on one upstream call. An entry's `timeoutHintMs` is honoured only below it; `defaultTimeoutMs` applies when the entry has none. Defaults 25 000 / 10 000. |
 | `maxResponseBytes` | The service stops reading an upstream body here (default 1 MiB) and marks the result truncated. Independent of the response `maxBytes` budget, which is applied afterwards. |
 | `variables` | Values for the non-secret `{{VARIABLE}}` references a dictionary declares (a region, a tenant). The credential variable behind `auth.value` is **never** configured here — it arrives with each request. |
+| `meteringHeaders` | Response headers the upstream uses to report what a call cost (credits, units). The service adds up each one's numeric value over the upstream calls a request made and sets the total, under the same name, on **every** response it sends: the sum on an execute, `0` on search, entries, health, errors and a 429 — so a consumer billing by the header never has to tell "free" from "not reported". A missing or non-numeric upstream value counts as `0`. Names are case-insensitive; headers the service sets itself (`content-*`, `cache-control`, `etag`, `x-budget-*`, …) are refused at start. |
 
 What the service does per call: validates `params` against the entry's input
 schema (a mismatch is a 400 naming the field, before anything is sent), renders
@@ -168,7 +170,7 @@ The package builds itself on install (`prepare`), so it can be pinned straight
 from git and embedded in another service:
 
 ```bash
-npm install github:cbeltrangomez84/tool-dictionary#v0.2.1
+npm install github:cbeltrangomez84/tool-dictionary#v0.2.2
 ```
 
 ```ts

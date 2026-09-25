@@ -10,7 +10,7 @@
 import { readFile } from 'node:fs/promises';
 import { etagOf } from './etag';
 import { ServiceError, type ErrorCode } from './errors';
-import { DEFAULT_EXECUTION, Executor, type ExecuteRequest, type ExecuteResponse, type ExecutionConfig, type IncomingHeaders } from './execute';
+import { DEFAULT_EXECUTION, Executor, type ExecuteRequest, type ExecuteResponse, type ExecutionConfig, type IncomingHeaders, type Meter } from './execute';
 import { loadDictionary, LoadError, type BranchFetcher, type LoadedDictionary } from './load';
 import { buildIndexResponse, buildResultsResponse, decodeCursor, type BuiltResponse } from './render/budget';
 import { renderEntry } from './render/detail';
@@ -571,6 +571,11 @@ export class DictionaryService {
   // Execution (spec 9.7)
   // -------------------------------------------------------------------------
 
+  /** Response headers relayed from the upstream on every response (see `ExecutionConfig.meteringHeaders`). */
+  get meteringHeaders(): readonly string[] {
+    return this.executor.config.meteringHeaders;
+  }
+
   /** True when this deployment executes and the dictionary has not opted out. */
   executable(id: string): boolean {
     return this.executor.config.enabled && this.requireTenant(id).config.execute !== false;
@@ -579,8 +584,9 @@ export class DictionaryService {
   /**
    * Run one catalogue entry on the caller's behalf. `headers` are the incoming
    * request's; the executor reads only the credential header the entry names.
+   * `meter` collects the upstream's metering headers (see `meteringHeaders`).
    */
-  async execute(id: string, raw: RawExecuteRequest, headers: IncomingHeaders): Promise<ExecuteResponse> {
+  async execute(id: string, raw: RawExecuteRequest, headers: IncomingHeaders, meter?: Meter): Promise<ExecuteResponse> {
     const t = this.requireLoaded(id);
     if (!this.executable(id)) throw new ServiceError(403, 'execution_disabled', `dictionary "${id}" does not execute on this deployment; call the endpoint the entry describes`);
     if (typeof raw.name !== 'string' || raw.name.length === 0) throw new ServiceError(400, 'invalid_params', '"name" is required');
@@ -595,7 +601,7 @@ export class DictionaryService {
     if (raw.format === 'text' || raw.format === 'json') request.format = raw.format;
     const maxBytes = clampBytes(raw.maxBytes, this.limits);
     const stamp = { id: t.id, version: t.loaded.doc.version, etag: t.loaded.etag };
-    return this.executor.execute(t.loaded.doc, stamp, entry, request, headers, { maxBytes });
+    return this.executor.execute(t.loaded.doc, stamp, entry, request, headers, { maxBytes }, meter);
   }
 
   /**
