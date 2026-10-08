@@ -1150,6 +1150,13 @@ Backends differ; the contract is only:
    of those words in every field over the one that answers all three. The words
    need not count the same: the word few entries contain ("tokens from fomo")
    says more about the question than the one most of the dictionary mentions.
+6. An entry whose name, one of its `keywords` or one of its `aliases` *is* the
+   question SHOULD outrank every entry that only matches part of it. Compare
+   them normalized the same way as the question (case, punctuation and the
+   stopwords dropped from it), or a keyword such as "fomo traders in this
+   token" never equals the question it was written for. A fixed bonus does not
+   satisfy this: an entry that repeats the question's words in every field
+   scores far above any bonus.
 
 ### 10.4 The relevance threshold
 

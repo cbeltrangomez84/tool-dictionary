@@ -89,3 +89,35 @@ describe('Bm25Backend coordination factor', () => {
     await backend.close();
   });
 });
+
+describe('Bm25Backend exact match', () => {
+  // Entries that repeat the question's words in every field, and one whose keyword IS the question.
+  const loud = ['board_buys', 'board_trades', 'board_traders'].map((n) =>
+    entry(n, `fomo traders token ${n}`, ['fomo traders', 'fomo token', 'traders token', 'fomo traders token buys']),
+  );
+  const whosIn = entry('whos_in', 'Which board wallets hold one coin', ['fomo traders in this token']);
+
+  it('an entry whose keyword is the whole question outranks every partial match', async () => {
+    const backend = new Bm25Backend();
+    await backend.index([...loud, whosIn]);
+    const hits = await backend.search('fomo traders in this token', { limit: 5 });
+    expect(hits[0]?.name).toBe('whos_in');
+    expect(hits[0]?.matchedOn).toContain('keywords');
+    // One word more and the question is no longer its keyword: the entry falls behind
+    // the loud ones, so the exact match is what put it first.
+    const partial = await backend.search('fomo traders in this token now', { limit: 5 });
+    expect(partial[0]?.name).not.toBe('whos_in');
+    await backend.close();
+  });
+
+  it('several exact hits keep their own order among themselves', async () => {
+    const a = entry('a_rich', 'fomo traders token fomo traders', ['fomo traders in this token', 'fomo', 'traders']);
+    const b = entry('b_plain', 'Something else', ['fomo traders in this token']);
+    const backend = new Bm25Backend();
+    await backend.index([...loud, a, b]);
+    const hits = await backend.search('fomo traders in this token', { limit: 5 });
+    expect(hits.slice(0, 2).map((h) => h.name)).toEqual(['a_rich', 'b_plain']);
+    expect(hits[1]!.score).toBeGreaterThan(hits[2]!.score);
+    await backend.close();
+  });
+});

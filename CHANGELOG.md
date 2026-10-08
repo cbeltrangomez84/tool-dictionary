@@ -4,6 +4,21 @@ All notable changes to the specification and the reference implementation.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 specification version and the package version move together while 0.x.
 
+## [0.2.4] — 2026-10-07
+
+### Specification
+- Ranking (§10.3 rule 6): an entry whose name, keyword or alias is the question
+  outranks every partial match, compared after the same normalization as the
+  question. A new SHOULD; no document or request changes.
+
+### Reference implementation
+- An exact name/keyword/alias match now ranks above every partial match: all
+  exact hits shift by one offset (at least `exactPhraseBonus`), keeping their
+  own order. The flat +4 bonus lost to entries that repeat the question's words.
+- Fixed: keywords and aliases holding a stopword ("fomo traders in this token")
+  never matched exactly, because the question drops stopwords and the stored
+  phrases did not.
+
 ## [0.2.3] — 2026-10-07
 
 ### Specification

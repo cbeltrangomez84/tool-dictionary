@@ -20,7 +20,7 @@
         "name": "alert_create",
         "title": "Create a price alert",
         "detail": "full",
-        "score": 9.688,
+        "score": 10.626,
         "matchedOn": [
           "keywords",
           "name",
@@ -169,7 +169,7 @@
         "name": "alert_create_v0",
         "title": "Create a price alert (legacy)",
         "detail": "full",
-        "score": 5.123,
+        "score": 5.592,
         "matchedOn": [
           "keywords",
           "name",
@@ -220,7 +220,7 @@
     "related": [],
     "budget": {
       "maxBytes": 12000,
-      "usedBytes": 3520,
+      "usedBytes": 3521,
       "truncated": false
     },
     "notice": null,

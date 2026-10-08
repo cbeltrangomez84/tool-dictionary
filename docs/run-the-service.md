@@ -170,7 +170,7 @@ The package builds itself on install (`prepare`), so it can be pinned straight
 from git and embedded in another service:
 
 ```bash
-npm install github:cbeltrangomez84/tool-dictionary#v0.2.3
+npm install github:cbeltrangomez84/tool-dictionary#v0.2.4
 ```
 
 ```ts

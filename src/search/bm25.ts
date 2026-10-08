@@ -41,7 +41,10 @@ export interface Bm25Options {
   k1?: number;
   b?: number;
   fieldWeights?: Partial<Record<Field, number>>;
-  /** Bonus when the whole normalized query equals one keyword phrase or the entry name. */
+  /**
+   * When the whole normalized query equals the entry name or one keyword or alias,
+   * the entry ranks above every partial match, at least this far above its own score.
+   */
   exactPhraseBonus?: number;
   /**
    * Floor for the coordination factor (how much of the query an entry covers).
@@ -117,9 +120,13 @@ export class Bm25Backend implements SearchBackend {
       const tf = new Map<Field, Map<string, number>>();
       const len = new Map<Field, number>();
       const seen = new Set<string>();
-      const phrases = new Set<string>([tokenize(entry.name).join(' ')]);
-      for (const keyword of entry.keywords ?? []) phrases.add(tokenize(keyword).join(' '));
-      for (const alias of entry.aliases ?? []) phrases.add(tokenize(alias).join(' '));
+      // Normalized the way the question is (stopwords dropped), or a keyword like
+      // "fomo traders in this token" could never equal the question it is.
+      const phrases = new Set<string>();
+      for (const text of [entry.name, ...(entry.keywords ?? []), ...(entry.aliases ?? [])]) {
+        const normalized = tokenize(text, { dropStopwords: true }).join(' ');
+        if (normalized) phrases.add(normalized);
+      }
 
       for (const field of FIELDS) {
         const counts = new Map<string, number>();
@@ -173,7 +180,7 @@ export class Bm25Backend implements SearchBackend {
     const totalWeight = [...wordWeight.values()].reduce((a, w) => a + w, 0);
     const pathPrefix = options.path ? `${options.path}/` : undefined;
 
-    const hits: Hit[] = [];
+    const scored: { name: string; score: number; matchedOn: string[]; exact: boolean; deprecated: boolean }[] = [];
     for (const doc of this.docs) {
       if (options.path && doc.path !== options.path && !doc.path.startsWith(pathPrefix!)) continue;
 
@@ -205,14 +212,29 @@ export class Bm25Backend implements SearchBackend {
       const share = totalWeight > 0 ? covered / totalWeight : 1;
       score *= this.coordFloor + (1 - this.coordFloor) * share ** this.coordPower;
 
-      if (doc.phrases.has(phrase)) {
-        score += this.exactPhraseBonus;
-        matched.add(phrase === tokenize(doc.name).join(' ') ? 'name' : 'keywords');
-      }
-      // Deprecated entries rank below any live entry with a real score (spec 10.3 rule 4).
-      if (doc.deprecated) score *= 0.5;
-      hits.push({ name: doc.name, score: Math.round(score * 1000) / 1000, matchedOn: [...matched] });
+      const exact = doc.phrases.has(phrase);
+      if (exact) matched.add(phrase === tokenize(doc.name, { dropStopwords: true }).join(' ') ? 'name' : 'keywords');
+      scored.push({ name: doc.name, score, matchedOn: [...matched], exact, deprecated: doc.deprecated });
     }
+
+    // An entry whose name, keyword or alias IS the question outranks every entry
+    // that only matches part of it (spec 10.3 rule 6). A flat bonus could not
+    // promise that: an entry repeating the question's words in every field scores
+    // far above it. All exact hits shift by one offset, so their order among
+    // themselves is still their own score's.
+    const exactHits = scored.filter((h) => h.exact);
+    if (exactHits.length > 0) {
+      const topPartial = Math.max(0, ...scored.filter((h) => !h.exact).map((h) => h.score));
+      const lowestExact = Math.min(...exactHits.map((h) => h.score));
+      const offset = Math.max(this.exactPhraseBonus, topPartial - lowestExact + this.exactPhraseBonus);
+      for (const h of exactHits) h.score += offset;
+    }
+    const hits: Hit[] = scored.map((h) => ({
+      name: h.name,
+      // Deprecated entries rank below any live entry with a real score (spec 10.3 rule 4).
+      score: Math.round((h.deprecated ? h.score * 0.5 : h.score) * 1000) / 1000,
+      matchedOn: h.matchedOn,
+    }));
 
     hits.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
     return hits.slice(0, options.limit);
