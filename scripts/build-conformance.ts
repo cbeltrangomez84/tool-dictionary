@@ -31,7 +31,7 @@ const CASES: Case[] = [
     slug: '01-results-auto',
     covers: 'The common case: auto detail, rank 1-3 at full, a related section, no notice.',
     dictionary: 'crypto-data',
-    request: { query: 'how many people hold this token' },
+    request: { query: 'holders of this token' },
   },
   {
     slug: '02-results-degraded',

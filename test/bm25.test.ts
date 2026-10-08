@@ -56,6 +56,31 @@ describe('Bm25Backend coordination factor', () => {
     await backend.close();
   });
 
+  it('the rare word of the question weighs more than the common one', async () => {
+    // "tokens" is everywhere, "fomo" is in one entry: the entry that has the
+    // rare word outranks the ones that repeat the common word loudly.
+    const common = ['sector_tokens', 'trending_tokens', 'new_tokens', 'token_tags'].map((n) =>
+      entry(n, `${n.replace('_', ' ')} tokens token list`, ['tokens', 'token', 'tokens list']),
+    );
+    const fomo = entry('board_buys', 'What a trader board is buying', ['fomo', 'board buys', 'tokens']);
+    const backend = new Bm25Backend();
+    await backend.index([...common, fomo]);
+    const hits = await backend.search('tokens from fomo', { limit: 5 });
+    expect(hits[0]?.name).toBe('board_buys');
+    expect(hits[0]!.score).toBeGreaterThan(hits[1]!.score * 2);
+    await backend.close();
+  });
+
+  it('a word no entry contains does not shrink every score', async () => {
+    const backend = new Bm25Backend();
+    await backend.index(ENTRIES);
+    const [plain] = await backend.search('wallet portfolio', { limit: 1 });
+    const [typo] = await backend.search('wallet portfolio xyzzy', { limit: 1 });
+    expect(typo?.name).toBe('wallet_holdings');
+    expect(typo?.score).toBe(plain?.score);
+    await backend.close();
+  });
+
   it('single-word queries are unaffected by coverage', async () => {
     const backend = new Bm25Backend();
     await backend.index(ENTRIES);

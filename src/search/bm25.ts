@@ -49,6 +49,11 @@ export interface Bm25Options {
    * more than matching two of them very well".
    */
   coordFloor?: number;
+  /**
+   * Exponent on the covered share of the question. Higher makes an entry that
+   * misses the rare word of the question fall further behind one that has it.
+   */
+  coordPower?: number;
 }
 
 interface Doc {
@@ -85,6 +90,7 @@ export class Bm25Backend implements SearchBackend {
   private readonly weights: Record<Field, number>;
   private readonly exactPhraseBonus: number;
   private readonly coordFloor: number;
+  private readonly coordPower: number;
 
   private docs: Doc[] = [];
   private df = new Map<string, number>();
@@ -96,7 +102,8 @@ export class Bm25Backend implements SearchBackend {
     this.b = options.b ?? 0.75;
     this.weights = { ...DEFAULT_FIELD_WEIGHTS, ...options.fieldWeights };
     this.exactPhraseBonus = options.exactPhraseBonus ?? 4;
-    this.coordFloor = options.coordFloor ?? 0.4;
+    this.coordFloor = options.coordFloor ?? 0;
+    this.coordPower = options.coordPower ?? 2;
   }
 
   async index(entries: Entry[], synonyms: Record<string, string[]> = {}): Promise<void> {
@@ -153,6 +160,17 @@ export class Bm25Backend implements SearchBackend {
     // Which terms stand for which word of the question, so that an entry
     // answering two words very loudly does not beat one that answers all three.
     const expansionsOf = new Map(queryTokens.map((t) => [t, new Set(this.synonyms.expand([t]))]));
+    // How much each word of the question is worth when counting coverage: its
+    // idf, so the rare word ("fomo") weighs more than the common one ("tokens")
+    // that half the dictionary mentions. A word only its synonyms reach takes
+    // the best of theirs; a word nothing in the dictionary contains is left out,
+    // since no entry can cover it and it would only shrink every score alike.
+    const wordWeight = new Map<string, number>();
+    for (const t of queryTokens) {
+      const present = (this.df.get(t) ?? 0) > 0 ? [t] : [...expansionsOf.get(t)!].filter((e) => (this.df.get(e) ?? 0) > 0);
+      if (present.length > 0) wordWeight.set(t, Math.max(...present.map((e) => this.idf(e))));
+    }
+    const totalWeight = [...wordWeight.values()].reduce((a, w) => a + w, 0);
     const pathPrefix = options.path ? `${options.path}/` : undefined;
 
     const hits: Hit[] = [];
@@ -180,9 +198,12 @@ export class Bm25Backend implements SearchBackend {
       }
       if (score === 0) continue;
 
-      // Coordination factor: the share of the question this entry answers at all.
-      const covered = queryTokens.filter((t) => [...(expansionsOf.get(t) ?? [])].some((e) => matchedTerms.has(e))).length;
-      score *= this.coordFloor + (1 - this.coordFloor) * (covered / queryTokens.length);
+      // Coordination factor: the share of the question this entry answers at
+      // all, each word weighted by how rare it is (spec 10.3 rule 5).
+      let covered = 0;
+      for (const [t, w] of wordWeight) if ([...expansionsOf.get(t)!].some((e) => matchedTerms.has(e))) covered += w;
+      const share = totalWeight > 0 ? covered / totalWeight : 1;
+      score *= this.coordFloor + (1 - this.coordFloor) * share ** this.coordPower;
 
       if (doc.phrases.has(phrase)) {
         score += this.exactPhraseBonus;

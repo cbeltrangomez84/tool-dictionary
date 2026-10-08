@@ -4,6 +4,24 @@ All notable changes to the specification and the reference implementation.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 specification version and the package version move together while 0.x.
 
+## [0.2.3] — 2026-10-07
+
+### Specification
+- Ranking (§10.3 rule 5): the words of a question need not weigh the same when
+  counting how much of it an entry covers; the rare word says more than the
+  common one. A clarification of a SHOULD; no document or request changes.
+
+### Reference implementation
+- BM25 coverage is weighted by idf: each word of the question counts for how
+  rare it is, so "tokens from fomo" ranks the entries that have "fomo" above
+  the many that repeat "tokens". The factor is `coordFloor + (1 - coordFloor)
+  × share^coordPower`, with new defaults `coordFloor: 0` (was 0.4) and
+  `coordPower: 2`. A word no entry contains is left out of the share, so a
+  typo no longer shrinks every score. Scores of partial matches drop, so some
+  weak results now fall under the relevance threshold.
+- Conformance vector 01 asks "holders of this token": its old question no
+  longer has three results above the threshold.
+
 ## [0.2.2] — 2026-09-24
 
 ### Specification

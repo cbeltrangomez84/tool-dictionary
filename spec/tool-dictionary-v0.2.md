@@ -1147,7 +1147,9 @@ Backends differ; the contract is only:
 5. An entry that matches *more of the question* SHOULD outrank one that matches
    a part of it more loudly. Agents ask in sentences ("how many wallets hold a
    token"), and a term-frequency score alone rewards the entry that repeats two
-   of those words in every field over the one that answers all three.
+   of those words in every field over the one that answers all three. The words
+   need not count the same: the word few entries contain ("tokens from fomo")
+   says more about the question than the one most of the dictionary mentions.
 
 ### 10.4 The relevance threshold
 

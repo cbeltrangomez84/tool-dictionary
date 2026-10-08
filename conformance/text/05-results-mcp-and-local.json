@@ -20,7 +20,7 @@
         "name": "echo_request",
         "title": "Echo a request back",
         "detail": "full",
-        "score": 11.669,
+        "score": 6.483,
         "matchedOn": [
           "keywords",
           "name",
@@ -54,7 +54,7 @@
         "name": "probe_upstream",
         "title": "Probe the upstream feed",
         "detail": "full",
-        "score": 7.075,
+        "score": 1.31,
         "matchedOn": [
           "keywords",
           "name",
@@ -83,7 +83,7 @@
     "related": [],
     "budget": {
       "maxBytes": 12000,
-      "usedBytes": 1293,
+      "usedBytes": 1291,
       "truncated": false
     },
     "notice": null,
