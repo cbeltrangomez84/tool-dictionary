@@ -306,7 +306,7 @@ describe('execute (spec 9.7)', () => {
     expect(byId['nft-data'].endpoints.execute).toBeUndefined();
 
     const health = await app.inject({ method: 'GET', url: '/v1/health' });
-    expect(health.json().execution).toEqual({ enabled: true, maxTimeoutMs: 200, defaultTimeoutMs: 100, maxResponseBytes: 512, variables: [], meteringHeaders: [] });
+    expect(health.json().execution).toEqual({ enabled: true, maxTimeoutMs: 200, defaultTimeoutMs: 100, maxResponseBytes: 512, variables: [], meteringHeaders: [], callerHeader: null });
   });
 
   it('refuses a target the dictionary did not declare: a caller-chosen host never executes', async () => {
@@ -372,6 +372,74 @@ describe('execute (spec 9.7)', () => {
 
   it('ServiceError carries the execute codes', () => {
     expect(new ServiceError(403, 'execution_disabled', 'x').code).toBe('execution_disabled');
+  });
+});
+
+describe('execute: caller header (spec 9.8)', () => {
+  const CALLER = 'x-caller';
+  const upstream = fakeFetch();
+  let app: FastifyInstance;
+  let plain: FastifyInstance;
+  let service: DictionaryService;
+  let unconfigured: DictionaryService;
+
+  const sent = () => new Headers(upstream.calls.at(-1)!.init.headers as Record<string, string>).get(CALLER);
+  const execute = (payload: Record<string, unknown>, headers: Record<string, string> = {}, target: FastifyInstance = app) =>
+    target.inject({ method: 'POST', url: '/v1/dictionaries/crypto-data/execute', headers: { 'x-api-key': KEY, ...headers }, payload });
+  const ARGS = { name: 'holders_count', params: { address: 'So111' } };
+
+  beforeAll(async () => {
+    upstream.answer(() => new Response('{"ok":true}', { status: 200, headers: { 'content-type': 'application/json' } }));
+    service = new DictionaryService({ execution: { enabled: true, callerHeader: 'X-Caller' }, fetch: upstream.impl });
+    await service.install({ source: { kind: 'inline' } }, example());
+    app = buildServer({ service, rateLimitPerMinute: 0 });
+    unconfigured = new DictionaryService({ execution: { enabled: true }, fetch: upstream.impl });
+    await unconfigured.install({ source: { kind: 'inline' } }, example());
+    plain = buildServer({ service: unconfigured, rateLimitPerMinute: 0 });
+    await Promise.all([app.ready(), plain.ready()]);
+  });
+  afterAll(async () => {
+    await Promise.all([app.close(), plain.close()]);
+    await Promise.all([service.close(), unconfigured.close()]);
+  });
+
+  it("sends the envelope's chatId upstream", async () => {
+    const res = await execute({ tool: 'execute_tool', input: ARGS, chatId: 'u:42:sidebar', callId: 'k1' });
+    expect(res.statusCode).toBe(200);
+    // MUTATION CHECK: dropping `caller` from the raw request in handleExecute leaves this null.
+    expect(sent()).toBe('u:42:sidebar');
+  });
+
+  it('prefers chatId, then caller, then the incoming header — in either body form', async () => {
+    await execute({ input: ARGS, chatId: 'chat', caller: 'app' }, { [CALLER]: 'header' });
+    expect(sent()).toBe('chat');
+    await execute({ input: ARGS, caller: 'app' }, { [CALLER]: 'header' });
+    expect(sent()).toBe('app');
+    await execute({ ...ARGS, caller: 'direct' });
+    expect(sent()).toBe('direct');
+    await execute(ARGS, { [CALLER]: 'header' });
+    expect(sent()).toBe('header');
+  });
+
+  it('cleans the label: printable ASCII, trimmed, at most 200 characters; nothing usable sends nothing', async () => {
+    await execute({ input: ARGS, chatId: '  a\u0000b\u00e9c  ' });
+    expect(sent()).toBe('abc');
+    await execute({ input: ARGS, chatId: 'x'.repeat(250) });
+    expect(sent()).toHaveLength(200);
+    await execute({ input: ARGS, chatId: 42, caller: '  ' });
+    expect(sent()).toBeNull();
+  });
+
+  it('never appears in the response', async () => {
+    const res = await execute({ input: ARGS, chatId: 'u:42:sidebar' });
+    expect(res.body).not.toContain('u:42:sidebar');
+    expect(JSON.stringify(res.headers)).not.toContain('u:42:sidebar');
+  });
+
+  it('is not sent when the deployment names no callerHeader', async () => {
+    await execute({ input: ARGS, chatId: 'u:42:sidebar' }, { [CALLER]: 'header' }, plain);
+    expect(sent()).toBeNull();
+    expect(JSON.stringify(upstream.calls.at(-1)!.init.headers)).not.toContain('u:42:sidebar');
   });
 });
 

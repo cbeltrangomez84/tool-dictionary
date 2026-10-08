@@ -97,7 +97,8 @@ execute by name* with the model never handling a URL or a key (spec §9.7):
     "defaultTimeoutMs": 10000,
     "maxResponseBytes": 1048576,
     "variables": { "REGION": "${REGION}" },
-    "meteringHeaders": ["x-credits-used"]
+    "meteringHeaders": ["x-credits-used"],
+    "callerHeader": "x-caller"
   }
 }
 ```
@@ -109,6 +110,7 @@ execute by name* with the model never handling a URL or a key (spec §9.7):
 | `maxResponseBytes` | The service stops reading an upstream body here (default 1 MiB) and marks the result truncated. Independent of the response `maxBytes` budget, which is applied afterwards. |
 | `variables` | Values for the non-secret `{{VARIABLE}}` references a dictionary declares (a region, a tenant). The credential variable behind `auth.value` is **never** configured here — it arrives with each request. |
 | `meteringHeaders` | Response headers the upstream uses to report what a call cost (credits, units). The service adds up each one's numeric value over the upstream calls a request made and sets the total, under the same name, on **every** response it sends: the sum on an execute, `0` on search, entries, health, errors and a 429 — so a consumer billing by the header never has to tell "free" from "not reported". A missing or non-numeric upstream value counts as `0`. Names are case-insensitive; headers the service sets itself (`content-*`, `cache-control`, `etag`, `x-budget-*`, …) are refused at start. |
+| `callerHeader` | Request header on which every upstream call carries who the execute was made for (spec §9.8): the body's `chatId`, else its `caller` — in the bare form or the agent envelope — else the incoming header of the same name. Printable ASCII, trimmed, at most 200 characters; never echoed; a header the descriptor sets wins. Attribution only: the upstream can meter per end user while one credential serves them all. Absent or `null`: nothing is sent. Headers the request already carries (`authorization`, `host`, `accept*`, `content-*`, `cookie`, `user-agent`, `x-td-var-*`, …) are refused at start. |
 
 What the service does per call: validates `params` against the entry's input
 schema (a mismatch is a 400 naming the field, before anything is sent), renders
@@ -170,7 +172,7 @@ The package builds itself on install (`prepare`), so it can be pinned straight
 from git and embedded in another service:
 
 ```bash
-npm install github:cbeltrangomez84/tool-dictionary#v0.2.5
+npm install github:cbeltrangomez84/tool-dictionary#v0.2.6
 ```
 
 ```ts

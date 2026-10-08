@@ -10,7 +10,7 @@
 import { readFile } from 'node:fs/promises';
 import { etagOf } from './etag';
 import { ServiceError, type ErrorCode } from './errors';
-import { DEFAULT_EXECUTION, Executor, type ExecuteRequest, type ExecuteResponse, type ExecutionConfig, type IncomingHeaders, type Meter } from './execute';
+import { DEFAULT_EXECUTION, Executor, callerLabel, type ExecuteRequest, type ExecuteResponse, type ExecutionConfig, type IncomingHeaders, type Meter } from './execute';
 import { loadDictionary, LoadError, type BranchFetcher, type LoadedDictionary } from './load';
 import { buildIndexResponse, buildResultsResponse, decodeCursor, type BuiltResponse } from './render/budget';
 import { renderEntry } from './render/detail';
@@ -101,6 +101,8 @@ export interface RawExecuteRequest {
   params?: unknown;
   maxBytes?: unknown;
   format?: unknown;
+  /** Who the call is for, from the request envelope (`chatId`, else `caller`); see `ExecutionConfig.callerHeader`. */
+  caller?: unknown;
 }
 
 export interface ServiceConfig {
@@ -599,6 +601,11 @@ export class DictionaryService {
     const params = raw.params === undefined ? {} : raw.params;
     const request: ExecuteRequest = { name: entry.name, params: params as Record<string, unknown> };
     if (raw.format === 'text' || raw.format === 'json') request.format = raw.format;
+    const callerHeader = this.executor.config.callerHeader;
+    if (callerHeader) {
+      const caller = callerLabel(raw.caller) ?? callerLabel(headers[callerHeader]);
+      if (caller !== null) request.caller = caller;
+    }
     const maxBytes = clampBytes(raw.maxBytes, this.limits);
     const stamp = { id: t.id, version: t.loaded.doc.version, etag: t.loaded.etag };
     return this.executor.execute(t.loaded.doc, stamp, entry, request, headers, { maxBytes }, meter);

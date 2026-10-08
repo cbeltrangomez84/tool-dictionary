@@ -4,6 +4,19 @@ All notable changes to the specification and the reference implementation.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 specification version and the package version move together while 0.x.
 
+## [0.2.6] — 2026-10-08
+
+### Specification
+- Request envelope (§9.8): a deployment MAY forward who an execute was made
+  for — the body's `chatId`, else `caller`, else the incoming header — on a
+  request header it names. A new MAY; no document or request changes.
+
+### Reference implementation
+- `execution.callerHeader` (default `null`): when set, every upstream call of an
+  execute carries the caller label on that header, cleaned to printable ASCII
+  and 200 characters, never echoed, and never over a header the descriptor sets.
+  Listed in `/v1/health` with the other execution settings.
+
 ## [0.2.5] — 2026-10-08
 
 ### Specification

@@ -77,6 +77,8 @@ const VARIABLE_NAME = /^[A-Z][A-Z0-9_]*$/;
 const HEADER_NAME = /^[A-Za-z0-9][A-Za-z0-9-]*$/;
 /** Headers the service or HTTP itself owns; relaying an upstream value over them would corrupt the response. */
 const RESERVED_HEADER = /^(content-|transfer-encoding$|connection$|cache-control$|etag$|retry-after$|set-cookie$|x-budget-|x-upstream-status$|access-control-)/;
+/** Headers an upstream request already carries or that carry its routing and credentials; a caller label must not ride on them. */
+const REQUEST_OWNED_HEADER = /^(content-|transfer-encoding$|connection$|host$|accept|authorization$|proxy-|cookie$|user-agent$|x-td-var-)/;
 
 /** Every field optional; every present field checked, so a typo fails at start rather than at the first execute. */
 function parseExecution(raw: unknown, env: NodeJS.ProcessEnv): Partial<ExecutionConfig> | undefined {
@@ -121,7 +123,14 @@ function parseExecution(raw: unknown, env: NodeJS.ProcessEnv): Partial<Execution
     }
     out.meteringHeaders = accepted;
   }
-  const unknown = Object.keys(cfg).filter((k) => !['enabled', 'maxTimeoutMs', 'defaultTimeoutMs', 'maxResponseBytes', 'variables', 'meteringHeaders'].includes(k));
+  if (cfg.callerHeader !== undefined && cfg.callerHeader !== null) {
+    const name = cfg.callerHeader;
+    if (typeof name !== 'string' || !HEADER_NAME.test(name)) throw new ConfigError(`execution.callerHeader: ${JSON.stringify(name)} is not a header name`);
+    const lower = name.toLowerCase();
+    if (REQUEST_OWNED_HEADER.test(lower)) throw new ConfigError(`execution.callerHeader: "${lower}" is a header the upstream request already carries`);
+    out.callerHeader = lower;
+  }
+  const unknown = Object.keys(cfg).filter((k) => !['enabled', 'maxTimeoutMs', 'defaultTimeoutMs', 'maxResponseBytes', 'variables', 'meteringHeaders', 'callerHeader'].includes(k));
   if (unknown.length > 0) throw new ConfigError(`execution has unknown keys: ${unknown.join(', ')}`);
   return Object.keys(out).length > 0 ? out : undefined;
 }

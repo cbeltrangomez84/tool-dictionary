@@ -6,7 +6,7 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest, type FastifyServerOptions } from 'fastify';
 import { agentBundle, usagePrompt } from '../agent';
 import { etagMatches } from '../etag';
-import { meteringValue, renderExecuteText, type Meter } from '../execute';
+import { callerLabel, meteringValue, renderExecuteText, type Meter } from '../execute';
 import { renderEntriesText } from '../render/text';
 import { DictionaryService, ServiceError, type Access, type RawExecuteRequest } from '../service';
 import type { SearchRequest } from '../types';
@@ -71,6 +71,18 @@ function unwrap(body: unknown, fields: readonly string[]): Record<string, unknow
   const input = record.input;
   if (!direct && input && typeof input === 'object' && !Array.isArray(input)) return input as Record<string, unknown>;
   return record;
+}
+
+/**
+ * Who an execute is made for, as the envelope says it: `chatId`, else
+ * `caller`, read from the body's top level whichever form it took. Relayed
+ * upstream only when the deployment names a `callerHeader`.
+ */
+function envelopeCaller(body: unknown): unknown {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return undefined;
+  const record = body as Record<string, unknown>;
+  // MUTATION CHECK: test/execute.test.ts "prefers chatId, then caller".
+  return callerLabel(record.chatId) ?? callerLabel(record.caller) ?? undefined;
 }
 
 const SEARCH_FIELDS = ['query', 'q', 'limit', 'detail', 'path', 'risk', 'maxBytes', 'format', 'cursor', 'includeRelated'] as const;
@@ -322,7 +334,7 @@ export function buildServer(options: ServerOptions): FastifyInstance {
   // is read from the incoming headers and forwarded, never kept.
   const handleExecute = async (request: FastifyRequest<{ Querystring?: { format?: string } }>, reply: FastifyReply, id: string, body: Record<string, unknown>) => {
     guard(request, id, 'read');
-    const raw: RawExecuteRequest = { name: body.name, params: body.params, maxBytes: body.maxBytes, format: body.format ?? request.query?.format };
+    const raw: RawExecuteRequest = { name: body.name, params: body.params, maxBytes: body.maxBytes, format: body.format ?? request.query?.format, caller: envelopeCaller(request.body) };
     request.meter = new Map();
     const result = await service.execute(id, raw, request.headers, request.meter);
     reply.header('cache-control', 'no-store');

@@ -1097,6 +1097,15 @@ request. A body that carries a real argument at the top level is taken as-is,
 so an argument that happens to be named `input` is never misread. Fields outside
 `input` (`tool`, `chatId`, `callId`, `chatObject`, …) are ignored, never echoed.
 
+**Caller attribution.** One credential often serves many end users, and the
+upstream that bills it cannot tell them apart. A deployment MAY name a request
+header on which every upstream call of an execute carries who it was made for:
+the body's top-level `chatId` when it is a string, else its `caller`, else the
+incoming request header of that same name. The value is a label, not an input:
+reduced to printable ASCII, trimmed, cut to 200 characters, never echoed, and
+it changes nothing else about the call — a header the descriptor sets wins over
+it. A deployment that names no such header sends nothing.
+
 ---
 
 ## 10. Search semantics

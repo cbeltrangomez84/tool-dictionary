@@ -41,6 +41,14 @@ export interface ExecutionConfig {
    * read calling the API directly.
    */
   meteringHeaders: string[];
+  /**
+   * Request header, lower-cased, on which every upstream call carries who the
+   * execute was made for: the envelope's `chatId`, else its `caller`, else the
+   * incoming header of the same name (spec 9.8). Attribution only — it chooses
+   * nothing about the call, and a header the descriptor sets wins over it.
+   * `null` (the default) sends nothing.
+   */
+  callerHeader: string | null;
 }
 
 export const DEFAULT_EXECUTION: ExecutionConfig = {
@@ -50,7 +58,23 @@ export const DEFAULT_EXECUTION: ExecutionConfig = {
   maxResponseBytes: 1_048_576,
   variables: {},
   meteringHeaders: [],
+  callerHeader: null,
 };
+
+/** Longest caller label forwarded; anything longer is cut. */
+export const MAX_CALLER_CHARS = 200;
+
+/**
+ * A caller label fit for a request header, or `null`: a string reduced to
+ * printable ASCII (a header carries nothing else), trimmed and cut to
+ * {@link MAX_CALLER_CHARS}. Anything else — a number, an object — is no label.
+ */
+export function callerLabel(raw: unknown): string | null {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof value !== 'string') return null;
+  const cleaned = value.replace(/[^\x20-\x7e]/g, '').trim().slice(0, MAX_CALLER_CHARS).trim();
+  return cleaned === '' ? null : cleaned;
+}
 
 /**
  * Per-request tally of the metering headers: header name to the sum of what
@@ -84,6 +108,8 @@ export interface ExecuteRequest {
   /** Response budget for the returned body, clamped by the service limits. */
   maxBytes?: number;
   format?: 'json' | 'text';
+  /** Who the call is made for, already cleaned ({@link callerLabel}); sent on `callerHeader`. */
+  caller?: string;
 }
 
 /** Headers of the incoming request, lower-cased. Only the credential header the entry names is read. */
@@ -131,6 +157,7 @@ export class Executor {
       ...config,
       variables: { ...(config.variables ?? {}) },
       meteringHeaders: (config.meteringHeaders ?? []).map((h) => h.toLowerCase()),
+      callerHeader: config.callerHeader ? config.callerHeader.toLowerCase() : null,
     };
     addFormats(this.ajv);
     this.fetchImpl = fetchImpl;
@@ -179,7 +206,7 @@ export class Executor {
     const timeoutMs = Math.min(call.timeoutHintMs ?? this.config.defaultTimeoutMs, this.config.maxTimeoutMs);
     const secrets = credential ? [credential.value] : [];
     const started = Date.now();
-    const upstream = await this.fetchUpstream(entry, resolved, timeoutMs, secrets, meter);
+    const upstream = await this.fetchUpstream(entry, resolved, timeoutMs, secrets, meter, request.caller);
     const elapsedMs = Date.now() - started;
 
     return shape(stamp, entry, upstream, elapsedMs, budget.maxBytes, secrets);
@@ -248,11 +275,13 @@ export class Executor {
     }
   }
 
-  private async fetchUpstream(entry: Entry, resolved: ResolvedRequest, timeoutMs: number, secrets: string[], meter?: Meter) {
+  private async fetchUpstream(entry: Entry, resolved: ResolvedRequest, timeoutMs: number, secrets: string[], meter?: Meter, caller?: string) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const init: RequestInit = { method: resolved.method, headers: { accept: 'application/json, text/plain;q=0.9, */*;q=0.5', ...resolved.headers }, redirect: 'manual', signal: controller.signal };
+      const attribution = this.config.callerHeader && caller ? { [this.config.callerHeader]: caller } : {};
+      // The descriptor's own headers come last: attribution never overrides what the dictionary says to send.
+      const init: RequestInit = { method: resolved.method, headers: { accept: 'application/json, text/plain;q=0.9, */*;q=0.5', ...attribution, ...resolved.headers }, redirect: 'manual', signal: controller.signal };
       if (resolved.body !== undefined && resolved.method !== 'GET' && resolved.method !== 'HEAD') {
         init.body = typeof resolved.body === 'string' ? resolved.body : JSON.stringify(resolved.body);
         (init.headers as Record<string, string>)['content-type'] ??= 'application/json';
