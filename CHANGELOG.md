@@ -4,6 +4,24 @@ All notable changes to the specification and the reference implementation.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 specification version and the package version move together while 0.x.
 
+## [0.2.7] — 2026-10-08
+
+### Specification
+- Request envelope (§9.8): the 0.2.6 caller attribution is replaced by context
+  forwarding. A deployment MAY, per dictionary, forward an execute body's
+  context fields — every top-level field except the call itself — to that
+  dictionary's upstreams as `x-td-ctx-<name>` headers. The standard no longer
+  names any field (`chatId`, `caller`) or gives one a meaning; the upstream
+  decides what the fields are for.
+
+### Reference implementation
+- `dictionaries[].forwardContext` (default `false`) turns forwarding on for one
+  dictionary's upstreams: scalars only, printable ASCII, at most 200 characters
+  each, 16 fields and 2048 characters in all, never echoed, and never over a
+  header the descriptor sets.
+- Removed `execution.callerHeader` (0.2.6). A config that still sets it fails at
+  start as an unknown key; move to `forwardContext` on the dictionary.
+
 ## [0.2.6] — 2026-10-08
 
 ### Specification

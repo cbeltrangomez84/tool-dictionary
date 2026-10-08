@@ -63,14 +63,10 @@ describe('config: execution (spec 9.7)', () => {
     await expect(loadConfig(await configFile({ adminTokens: ['root'], dictionaries: [{ source: { kind: 'file', location: 'x.json' }, execute: 'no' }] }), {})).rejects.toThrow(/execute must be a boolean/);
   });
 
-  it('callerHeader: lower-cased; not a header name, or one the upstream request already carries, fails at start', async () => {
-    expect((await loadConfig(await configFile({ adminTokens: ['root'], execution: { callerHeader: 'X-DexData-Caller' } }), {})).execution).toEqual({ callerHeader: 'x-dexdata-caller' });
-    expect((await loadConfig(await configFile({ adminTokens: ['root'], execution: { callerHeader: null } }), {})).execution?.callerHeader ?? null).toBeNull();
-    await expect(loadConfig(await configFile({ adminTokens: ['root'], execution: { callerHeader: ['x-caller'] } }), {})).rejects.toThrow(/not a header name/);
-    await expect(loadConfig(await configFile({ adminTokens: ['root'], execution: { callerHeader: 'x caller' } }), {})).rejects.toThrow(/not a header name/);
-    for (const owned of ['Authorization', 'host', 'accept', 'content-type', 'cookie', 'user-agent', 'x-td-var-apikey']) {
-      await expect(loadConfig(await configFile({ adminTokens: ['root'], execution: { callerHeader: owned } }), {})).rejects.toThrow(/already carries/);
-    }
+  it('forwardContext: per dictionary, a boolean; anything else fails at start; callerHeader (0.2.6) is gone', async () => {
+    expect((await loadConfig(await configFile({ adminTokens: ['root'], dictionaries: [{ source: { kind: 'file', location: 'x.json' }, forwardContext: true }] }), {})).dictionaries[0].forwardContext).toBe(true);
+    await expect(loadConfig(await configFile({ adminTokens: ['root'], dictionaries: [{ source: { kind: 'file', location: 'x.json' }, forwardContext: 'yes' }] }), {})).rejects.toThrow(/forwardContext must be a boolean/);
+    await expect(loadConfig(await configFile({ adminTokens: ['root'], execution: { callerHeader: 'x-caller' } }), {})).rejects.toThrow(/unknown keys: callerHeader/);
   });
 
   it('meteringHeaders: lower-cased and de-duplicated; not an array, not a header name, or a header the service owns fails at start', async () => {

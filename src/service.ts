@@ -10,7 +10,7 @@
 import { readFile } from 'node:fs/promises';
 import { etagOf } from './etag';
 import { ServiceError, type ErrorCode } from './errors';
-import { DEFAULT_EXECUTION, Executor, callerLabel, type ExecuteRequest, type ExecuteResponse, type ExecutionConfig, type IncomingHeaders, type Meter } from './execute';
+import { DEFAULT_EXECUTION, Executor, contextHeaders, type ExecuteRequest, type ExecuteResponse, type ExecutionConfig, type IncomingHeaders, type Meter } from './execute';
 import { loadDictionary, LoadError, type BranchFetcher, type LoadedDictionary } from './load';
 import { buildIndexResponse, buildResultsResponse, decodeCursor, type BuiltResponse } from './render/budget';
 import { renderEntry } from './render/detail';
@@ -93,6 +93,12 @@ export interface DictionaryConfig {
    * it on. Default true; irrelevant while the deployment keeps execution off.
    */
   execute?: boolean;
+  /**
+   * Forward an execute body's context fields to this dictionary's upstreams as
+   * `x-td-ctx-*` headers (spec 9.8). Default false: a deployment says which
+   * upstreams may see them, never the request.
+   */
+  forwardContext?: boolean;
 }
 
 /** An execute body as it arrives, before anything is trusted about it. */
@@ -101,8 +107,8 @@ export interface RawExecuteRequest {
   params?: unknown;
   maxBytes?: unknown;
   format?: unknown;
-  /** Who the call is for, from the request envelope (`chatId`, else `caller`); see `ExecutionConfig.callerHeader`. */
-  caller?: unknown;
+  /** The body's context fields: what it carries besides the call itself (spec 9.8). Forwarded only when the dictionary says so. */
+  context?: unknown;
 }
 
 export interface ServiceConfig {
@@ -601,10 +607,9 @@ export class DictionaryService {
     const params = raw.params === undefined ? {} : raw.params;
     const request: ExecuteRequest = { name: entry.name, params: params as Record<string, unknown> };
     if (raw.format === 'text' || raw.format === 'json') request.format = raw.format;
-    const callerHeader = this.executor.config.callerHeader;
-    if (callerHeader) {
-      const caller = callerLabel(raw.caller) ?? callerLabel(headers[callerHeader]);
-      if (caller !== null) request.caller = caller;
+    if (t.config.forwardContext === true) {
+      const context = contextHeaders(raw.context);
+      if (Object.keys(context).length > 0) request.context = context;
     }
     const maxBytes = clampBytes(raw.maxBytes, this.limits);
     const stamp = { id: t.id, version: t.loaded.doc.version, etag: t.loaded.etag };

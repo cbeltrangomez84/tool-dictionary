@@ -306,7 +306,7 @@ describe('execute (spec 9.7)', () => {
     expect(byId['nft-data'].endpoints.execute).toBeUndefined();
 
     const health = await app.inject({ method: 'GET', url: '/v1/health' });
-    expect(health.json().execution).toEqual({ enabled: true, maxTimeoutMs: 200, defaultTimeoutMs: 100, maxResponseBytes: 512, variables: [], meteringHeaders: [], callerHeader: null });
+    expect(health.json().execution).toEqual({ enabled: true, maxTimeoutMs: 200, defaultTimeoutMs: 100, maxResponseBytes: 512, variables: [], meteringHeaders: [] });
   });
 
   it('refuses a target the dictionary did not declare: a caller-chosen host never executes', async () => {
@@ -375,23 +375,23 @@ describe('execute (spec 9.7)', () => {
   });
 });
 
-describe('execute: caller header (spec 9.8)', () => {
-  const CALLER = 'x-caller';
+describe('execute: context forwarding (spec 9.8)', () => {
   const upstream = fakeFetch();
   let app: FastifyInstance;
   let plain: FastifyInstance;
   let service: DictionaryService;
   let unconfigured: DictionaryService;
 
-  const sent = () => new Headers(upstream.calls.at(-1)!.init.headers as Record<string, string>).get(CALLER);
-  const execute = (payload: Record<string, unknown>, headers: Record<string, string> = {}, target: FastifyInstance = app) =>
-    target.inject({ method: 'POST', url: '/v1/dictionaries/crypto-data/execute', headers: { 'x-api-key': KEY, ...headers }, payload });
+  const sentHeaders = () => Object.fromEntries(new Headers(upstream.calls.at(-1)!.init.headers as Record<string, string>).entries());
+  const sentContext = () => Object.fromEntries(Object.entries(sentHeaders()).filter(([name]) => name.startsWith('x-td-ctx-')));
+  const execute = (payload: Record<string, unknown>, target: FastifyInstance = app) =>
+    target.inject({ method: 'POST', url: '/v1/dictionaries/crypto-data/execute', headers: { 'x-api-key': KEY }, payload });
   const ARGS = { name: 'holders_count', params: { address: 'So111' } };
 
   beforeAll(async () => {
     upstream.answer(() => new Response('{"ok":true}', { status: 200, headers: { 'content-type': 'application/json' } }));
-    service = new DictionaryService({ execution: { enabled: true, callerHeader: 'X-Caller' }, fetch: upstream.impl });
-    await service.install({ source: { kind: 'inline' } }, example());
+    service = new DictionaryService({ execution: { enabled: true }, fetch: upstream.impl });
+    await service.install({ source: { kind: 'inline' }, forwardContext: true }, example());
     app = buildServer({ service, rateLimitPerMinute: 0 });
     unconfigured = new DictionaryService({ execution: { enabled: true }, fetch: upstream.impl });
     await unconfigured.install({ source: { kind: 'inline' } }, example());
@@ -403,42 +403,43 @@ describe('execute: caller header (spec 9.8)', () => {
     await Promise.all([service.close(), unconfigured.close()]);
   });
 
-  it("sends the envelope's chatId upstream", async () => {
-    const res = await execute({ tool: 'execute_tool', input: ARGS, chatId: 'u:42:sidebar', callId: 'k1' });
+  it("forwards the envelope's other fields as x-td-ctx-* headers", async () => {
+    const res = await execute({ tool: 'execute_tool', input: ARGS, chatId: 'u:42:sidebar', callId: 'k1', caller: 'app-7' });
     expect(res.statusCode).toBe(200);
-    // MUTATION CHECK: dropping `caller` from the raw request in handleExecute leaves this null.
-    expect(sent()).toBe('u:42:sidebar');
+    expect(sentContext()).toEqual({ 'x-td-ctx-tool': 'execute_tool', 'x-td-ctx-chatid': 'u:42:sidebar', 'x-td-ctx-callid': 'k1', 'x-td-ctx-caller': 'app-7' });
   });
 
-  it('prefers chatId, then caller, then the incoming header — in either body form', async () => {
-    await execute({ input: ARGS, chatId: 'chat', caller: 'app' }, { [CALLER]: 'header' });
-    expect(sent()).toBe('chat');
-    await execute({ input: ARGS, caller: 'app' }, { [CALLER]: 'header' });
-    expect(sent()).toBe('app');
-    await execute({ ...ARGS, caller: 'direct' });
-    expect(sent()).toBe('direct');
-    await execute(ARGS, { [CALLER]: 'header' });
-    expect(sent()).toBe('header');
+  it('in the bare form, everything but the call itself', async () => {
+    await execute({ ...ARGS, maxBytes: 4096, format: 'json', dictionary: 'crypto-data', tenant_ref: 'acme' });
+    expect(sentContext()).toEqual({ 'x-td-ctx-tenant-ref': 'acme' });
   });
 
-  it('cleans the label: printable ASCII, trimmed, at most 200 characters; nothing usable sends nothing', async () => {
-    await execute({ input: ARGS, chatId: '  a\u0000b\u00e9c  ' });
-    expect(sent()).toBe('abc');
-    await execute({ input: ARGS, chatId: 'x'.repeat(250) });
-    expect(sent()).toHaveLength(200);
-    await execute({ input: ARGS, chatId: 42, caller: '  ' });
-    expect(sent()).toBeNull();
+  it('sends scalars only, cleaned: printable ASCII, trimmed, at most 200 characters', async () => {
+    await execute({ input: ARGS, a: '  x\u0000yéz  ', b: 'q'.repeat(250), n: 3, t: false, o: { deep: 1 }, l: [1], z: null, e: '  ', 'bad name': 'v', 'x-td-var-key': 'v2' });
+    expect(sentContext()).toEqual({ 'x-td-ctx-a': 'xyz', 'x-td-ctx-b': 'q'.repeat(200), 'x-td-ctx-n': '3', 'x-td-ctx-t': 'false', 'x-td-ctx-x-td-var-key': 'v2' });
   });
 
-  it('never appears in the response', async () => {
+  it('caps the fields: the first wins a shared name, and past the count or size limit the rest are dropped', async () => {
+    await execute({ input: ARGS, chat_id: 'first', 'chat-id': 'second' });
+    expect(sentContext()).toEqual({ 'x-td-ctx-chat-id': 'first' });
+    const many = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`f${i}`, 'v']));
+    await execute({ input: ARGS, ...many });
+    expect(Object.keys(sentContext())).toHaveLength(16);
+    const big = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`g${i}`, 'w'.repeat(200)]));
+    await execute({ input: ARGS, ...big });
+    expect(Object.keys(sentContext())).toHaveLength(10);
+  });
+
+  it("never overrides a header the descriptor sets, and never appears in the response", async () => {
     const res = await execute({ input: ARGS, chatId: 'u:42:sidebar' });
+    expect(sentHeaders().accept).toContain('application/json');
     expect(res.body).not.toContain('u:42:sidebar');
     expect(JSON.stringify(res.headers)).not.toContain('u:42:sidebar');
   });
 
-  it('is not sent when the deployment names no callerHeader', async () => {
-    await execute({ input: ARGS, chatId: 'u:42:sidebar' }, { [CALLER]: 'header' }, plain);
-    expect(sent()).toBeNull();
+  it('is not sent when the dictionary does not forward context', async () => {
+    await execute({ input: ARGS, chatId: 'u:42:sidebar' }, plain);
+    expect(sentContext()).toEqual({});
     expect(JSON.stringify(upstream.calls.at(-1)!.init.headers)).not.toContain('u:42:sidebar');
   });
 });

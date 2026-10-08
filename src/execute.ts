@@ -41,14 +41,6 @@ export interface ExecutionConfig {
    * read calling the API directly.
    */
   meteringHeaders: string[];
-  /**
-   * Request header, lower-cased, on which every upstream call carries who the
-   * execute was made for: the envelope's `chatId`, else its `caller`, else the
-   * incoming header of the same name (spec 9.8). Attribution only — it chooses
-   * nothing about the call, and a header the descriptor sets wins over it.
-   * `null` (the default) sends nothing.
-   */
-  callerHeader: string | null;
 }
 
 export const DEFAULT_EXECUTION: ExecutionConfig = {
@@ -58,22 +50,48 @@ export const DEFAULT_EXECUTION: ExecutionConfig = {
   maxResponseBytes: 1_048_576,
   variables: {},
   meteringHeaders: [],
-  callerHeader: null,
 };
 
-/** Longest caller label forwarded; anything longer is cut. */
-export const MAX_CALLER_CHARS = 200;
+/** Prefix of every forwarded context header (spec 9.8): field `chatId` travels as `x-td-ctx-chatid`. */
+export const CONTEXT_HEADER_PREFIX = 'x-td-ctx-';
+/** Most context fields forwarded on one call; later ones are dropped. */
+export const MAX_CONTEXT_FIELDS = 16;
+/** Longest forwarded value; anything longer is cut. */
+export const MAX_CONTEXT_VALUE_CHARS = 200;
+/** Ceiling on the forwarded values together, so the headers stay far below what any server accepts. */
+export const MAX_CONTEXT_TOTAL_CHARS = 2048;
+
+const CONTEXT_FIELD = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
 /**
- * A caller label fit for a request header, or `null`: a string reduced to
- * printable ASCII (a header carries nothing else), trimmed and cut to
- * {@link MAX_CALLER_CHARS}. Anything else — a number, an object — is no label.
+ * The request headers that forward a body's context fields upstream (spec 9.8):
+ * each field whose name is a plain identifier and whose value is a string, a
+ * finite number or a boolean, as `x-td-ctx-<name>` — lower-cased, `_` as `-`.
+ * A string is reduced to printable ASCII (a header carries nothing else),
+ * trimmed and cut to {@link MAX_CONTEXT_VALUE_CHARS}. Objects, arrays, `null`
+ * and empty values are skipped; the first field wins a name two of them share;
+ * past {@link MAX_CONTEXT_FIELDS} or {@link MAX_CONTEXT_TOTAL_CHARS}, the rest
+ * are dropped. The service gives none of them a meaning.
  */
-export function callerLabel(raw: unknown): string | null {
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  if (typeof value !== 'string') return null;
-  const cleaned = value.replace(/[^\x20-\x7e]/g, '').trim().slice(0, MAX_CALLER_CHARS).trim();
-  return cleaned === '' ? null : cleaned;
+export function contextHeaders(fields: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!fields || typeof fields !== 'object' || Array.isArray(fields)) return out;
+  let count = 0;
+  let total = 0;
+  for (const [name, raw] of Object.entries(fields as Record<string, unknown>)) {
+    if (!CONTEXT_FIELD.test(name)) continue;
+    let value: string;
+    if (typeof raw === 'string') value = raw.replace(/[^\x20-\x7e]/g, '').trim().slice(0, MAX_CONTEXT_VALUE_CHARS).trim();
+    else if ((typeof raw === 'number' && Number.isFinite(raw)) || typeof raw === 'boolean') value = String(raw);
+    else continue;
+    const header = CONTEXT_HEADER_PREFIX + name.toLowerCase().replace(/_/g, '-');
+    if (value === '' || header in out) continue;
+    if (count === MAX_CONTEXT_FIELDS || total + value.length > MAX_CONTEXT_TOTAL_CHARS) continue;
+    out[header] = value;
+    count += 1;
+    total += value.length;
+  }
+  return out;
 }
 
 /**
@@ -108,8 +126,8 @@ export interface ExecuteRequest {
   /** Response budget for the returned body, clamped by the service limits. */
   maxBytes?: number;
   format?: 'json' | 'text';
-  /** Who the call is made for, already cleaned ({@link callerLabel}); sent on `callerHeader`. */
-  caller?: string;
+  /** Context headers ({@link contextHeaders}) sent on every upstream call; set only when the dictionary forwards context. */
+  context?: Record<string, string>;
 }
 
 /** Headers of the incoming request, lower-cased. Only the credential header the entry names is read. */
@@ -157,7 +175,6 @@ export class Executor {
       ...config,
       variables: { ...(config.variables ?? {}) },
       meteringHeaders: (config.meteringHeaders ?? []).map((h) => h.toLowerCase()),
-      callerHeader: config.callerHeader ? config.callerHeader.toLowerCase() : null,
     };
     addFormats(this.ajv);
     this.fetchImpl = fetchImpl;
@@ -206,7 +223,7 @@ export class Executor {
     const timeoutMs = Math.min(call.timeoutHintMs ?? this.config.defaultTimeoutMs, this.config.maxTimeoutMs);
     const secrets = credential ? [credential.value] : [];
     const started = Date.now();
-    const upstream = await this.fetchUpstream(entry, resolved, timeoutMs, secrets, meter, request.caller);
+    const upstream = await this.fetchUpstream(entry, resolved, timeoutMs, secrets, meter, request.context);
     const elapsedMs = Date.now() - started;
 
     return shape(stamp, entry, upstream, elapsedMs, budget.maxBytes, secrets);
@@ -275,13 +292,12 @@ export class Executor {
     }
   }
 
-  private async fetchUpstream(entry: Entry, resolved: ResolvedRequest, timeoutMs: number, secrets: string[], meter?: Meter, caller?: string) {
+  private async fetchUpstream(entry: Entry, resolved: ResolvedRequest, timeoutMs: number, secrets: string[], meter?: Meter, context: Record<string, string> = {}) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const attribution = this.config.callerHeader && caller ? { [this.config.callerHeader]: caller } : {};
-      // The descriptor's own headers come last: attribution never overrides what the dictionary says to send.
-      const init: RequestInit = { method: resolved.method, headers: { accept: 'application/json, text/plain;q=0.9, */*;q=0.5', ...attribution, ...resolved.headers }, redirect: 'manual', signal: controller.signal };
+      // The descriptor's own headers come last: forwarded context never overrides what the dictionary says to send.
+      const init: RequestInit = { method: resolved.method, headers: { accept: 'application/json, text/plain;q=0.9, */*;q=0.5', ...context, ...resolved.headers }, redirect: 'manual', signal: controller.signal };
       if (resolved.body !== undefined && resolved.method !== 'GET' && resolved.method !== 'HEAD') {
         init.body = typeof resolved.body === 'string' ? resolved.body : JSON.stringify(resolved.body);
         (init.headers as Record<string, string>)['content-type'] ??= 'application/json';

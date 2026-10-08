@@ -1095,16 +1095,24 @@ bare arguments and this envelope. The rule is mechanical: when none of the
 route's own top-level fields is present and `input` is an object, `input` is the
 request. A body that carries a real argument at the top level is taken as-is,
 so an argument that happens to be named `input` is never misread. Fields outside
-`input` (`tool`, `chatId`, `callId`, `chatObject`, …) are ignored, never echoed.
+`input` (`tool`, `chatId`, `callId`, `chatObject`, …) are never echoed and
+change nothing about the call.
 
-**Caller attribution.** One credential often serves many end users, and the
-upstream that bills it cannot tell them apart. A deployment MAY name a request
-header on which every upstream call of an execute carries who it was made for:
-the body's top-level `chatId` when it is a string, else its `caller`, else the
-incoming request header of that same name. The value is a label, not an input:
-reduced to printable ASCII, trimmed, cut to 200 characters, never echoed, and
-it changes nothing else about the call — a header the descriptor sets wins over
-it. A deployment that names no such header sends nothing.
+**Context forwarding.** Those other fields are the body's *context*: on an
+`execute`, every top-level field except the call itself (`input`, `name`,
+`params`, `maxBytes`, `format`, `dictionary`). The service gives them no
+meaning. A deployment MAY, per dictionary, forward them to that dictionary's
+upstreams so the upstream can use them — for example, to tell apart the many
+end users one credential serves. When it does, every upstream call of the
+execute carries each context field as the request header `x-td-ctx-<name>`, the
+name lower-cased with `_` as `-` (`chatId` → `x-td-ctx-chatid`). Only fields
+whose name matches `[A-Za-z0-9][A-Za-z0-9_-]{0,63}` and whose value is a
+string, a finite number or a boolean are sent; a string is reduced to printable
+ASCII, trimmed and cut to 200 characters. Objects, arrays, `null` and empty
+values are skipped, the first field wins a name two of them share, and at most
+16 fields totalling 2048 value characters are sent, in body order. A header the
+descriptor sets wins over a forwarded one. A request never turns forwarding on;
+a deployment that does not forward context sends none of it.
 
 ---
 
