@@ -1,4 +1,4 @@
-DICTIONARY crypto-data v47 — 4 results for "holders of this token"
+DICTIONARY crypto-data v47 — 5 results for "holders of this token"
 
 1. holders_count — Token holder count
    Number of distinct wallets currently holding a token.
@@ -46,13 +46,16 @@ DICTIONARY crypto-data v47 — 4 results for "holders of this token"
    path: wallets/pnl
    see also: wallet_pnl (broader) — the same figure split per token, if you need to know which trade won
 
+5. wallet_pnl — Wallet profit and loss
+   How much a wallet has made or lost overall, realized and unrealized, in USD.
+   path: wallets/pnl
+   see also: wallet_pnl_by_token (narrower) — the same figure split per token, if you need to know which trade won
+   see also: holders_top (pairs_with) — what those wallets actually made on the token
+
 RELATED
    - token_resolve_symbol — Find a token by symbol or name
      Turn a ticker like BONK into the contract address every other tool needs.
      (prerequisite to holders_count: if you only have a ticker, not an address)
-   - wallet_pnl — Wallet profit and loss
-     How much a wallet has made or lost overall, realized and unrealized, in USD.
-     (pairs_with to holders_top: what those wallets actually made on the token)
 
 To use one, call it with the input shown. To see the full definition of any of
 these, search again with its exact name.

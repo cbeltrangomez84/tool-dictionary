@@ -4,6 +4,18 @@ All notable changes to the specification and the reference implementation.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the
 specification version and the package version move together while 0.x.
 
+## [0.2.5] — 2026-10-08
+
+### Specification
+- Ranking (§10.3 rule 7): a term reached only through a synonym does not weigh
+  more than the word of the question it stands for. A new SHOULD; no document
+  or request changes.
+
+### Reference implementation
+- BM25 caps a synonym's idf at the idf of the typed word it expands, so a rare
+  synonym ("owner") no longer outranks the common word typed ("holders").
+  A typed word that no entry contains leaves its synonyms uncapped.
+
 ## [0.2.4] — 2026-10-07
 
 ### Specification

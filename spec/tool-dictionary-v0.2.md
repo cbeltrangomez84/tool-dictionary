@@ -1157,6 +1157,13 @@ Backends differ; the contract is only:
    token" never equals the question it was written for. A fixed bonus does not
    satisfy this: an entry that repeats the question's words in every field
    scores far above any bonus.
+7. A term reached only through a synonym SHOULD NOT weigh more than the word of
+   the question it stands for. A synonym that is rare in the dictionary would
+   otherwise outweigh the common word the user typed and pull in the entries
+   that contain it for another reason ("holders" reaching an entry about a
+   contract's "owner"). When the dictionary contains no entry with the typed
+   word, its synonyms are the only way to reach an answer and keep their own
+   weight.
 
 ### 10.4 The relevance threshold
 

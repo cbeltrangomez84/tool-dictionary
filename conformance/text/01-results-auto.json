@@ -20,7 +20,7 @@
         "name": "holders_count",
         "title": "Token holder count",
         "detail": "full",
-        "score": 21.614,
+        "score": 17.822,
         "matchedOn": [
           "keywords",
           "name",
@@ -115,7 +115,7 @@
         "name": "holders_top",
         "title": "Largest holders",
         "detail": "full",
-        "score": 13.758,
+        "score": 13.402,
         "matchedOn": [
           "keywords",
           "name",
@@ -308,6 +308,36 @@
             "reason": "the same figure split per token, if you need to know which trade won"
           }
         ]
+      },
+      {
+        "name": "wallet_pnl",
+        "title": "Wallet profit and loss",
+        "detail": "summary",
+        "score": 3.031,
+        "matchedOn": [
+          "keywords",
+          "name",
+          "title",
+          "summary",
+          "path",
+          "inputNames",
+          "description",
+          "inputDescriptions"
+        ],
+        "summary": "How much a wallet has made or lost overall, realized and unrealized, in USD.",
+        "path": "wallets/pnl",
+        "relations": [
+          {
+            "type": "narrower",
+            "target": "wallet_pnl_by_token",
+            "reason": "the same figure split per token, if you need to know which trade won"
+          },
+          {
+            "type": "pairs_with",
+            "target": "holders_top",
+            "reason": "what those wallets actually made on the token"
+          }
+        ]
       }
     ],
     "related": [
@@ -334,35 +364,11 @@
             "reason": "if you only have a ticker, not an address"
           }
         ]
-      },
-      {
-        "name": "wallet_pnl",
-        "title": "Wallet profit and loss",
-        "detail": "summary",
-        "via": {
-          "from": "holders_top",
-          "type": "pairs_with",
-          "reason": "what those wallets actually made on the token"
-        },
-        "summary": "How much a wallet has made or lost overall, realized and unrealized, in USD.",
-        "path": "wallets/pnl",
-        "relations": [
-          {
-            "type": "narrower",
-            "target": "wallet_pnl_by_token",
-            "reason": "the same figure split per token, if you need to know which trade won"
-          },
-          {
-            "type": "pairs_with",
-            "target": "holders_top",
-            "reason": "what those wallets actually made on the token"
-          }
-        ]
       }
     ],
     "budget": {
       "maxBytes": 12000,
-      "usedBytes": 6724,
+      "usedBytes": 6736,
       "truncated": false
     },
     "notice": null,

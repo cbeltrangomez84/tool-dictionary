@@ -178,6 +178,21 @@ export class Bm25Backend implements SearchBackend {
       if (present.length > 0) wordWeight.set(t, Math.max(...present.map((e) => this.idf(e))));
     }
     const totalWeight = [...wordWeight.values()].reduce((a, w) => a + w, 0);
+    // The idf a synonym may score with: never more than the word it stands for
+    // (spec 10.3 rule 7). A synonym rare in the dictionary would otherwise outweigh
+    // the common word the user typed, and drag in the entries that mention it for
+    // another reason ("holders" -> "owner" ranking the deployer first). A word
+    // nothing in the dictionary contains leaves its synonyms uncapped: they are the
+    // only way to reach it. A term from a multi-word synonym stands for the whole
+    // question.
+    const synonymCap = new Map<string, number>();
+    for (const term of expanded) {
+      if (queryTokens.includes(term)) continue;
+      const fromSingle = queryTokens.filter((t) => expansionsOf.get(t)!.has(term));
+      const sources = fromSingle.length > 0 ? fromSingle : queryTokens;
+      const cap = sources.some((t) => (this.df.get(t) ?? 0) === 0) ? Infinity : Math.max(...sources.map((t) => this.idf(t)));
+      synonymCap.set(term, cap);
+    }
     const pathPrefix = options.path ? `${options.path}/` : undefined;
 
     const scored: { name: string; score: number; matchedOn: string[]; exact: boolean; deprecated: boolean }[] = [];
@@ -188,7 +203,8 @@ export class Bm25Backend implements SearchBackend {
       const matched = new Set<Field>();
       const matchedTerms = new Set<string>();
       for (const term of expanded) {
-        const idf = this.idf(term);
+        // MUTATION CHECK: test/bm25.test.ts "a rare synonym does not outrank the common word typed".
+        const idf = Math.min(this.idf(term), synonymCap.get(term) ?? Infinity);
         if (idf === 0) continue;
         // Synonym expansions count for a little less than what the user typed.
         const termWeight = queryTokens.includes(term) ? 1 : 0.7;

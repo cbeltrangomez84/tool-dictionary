@@ -121,3 +121,28 @@ describe('Bm25Backend exact match', () => {
     await backend.close();
   });
 });
+
+describe('Bm25Backend synonym weight', () => {
+  // "holders" is common (many entries), "owner" is rare and sits on an unrelated entry
+  // that a holders synonym happens to reach.
+  const holderEntries = Array.from({ length: 14 }, (_, i) => entry(`holders_${i}`, `Token list ${i}`, [`holders ${i}`]));
+  const filler = Array.from({ length: 8 }, (_, i) => entry(`fill_${i}`, `Price board ${i}`, [`price ${i}`]));
+  const deployer = entry('deployer', 'Token deployer', ['owner', 'token owner', 'deployer']);
+
+  it('a rare synonym does not outrank the common word typed', async () => {
+    const backend = new Bm25Backend();
+    await backend.index([...holderEntries, ...filler, deployer], { holders: ['owners'] });
+    const hits = await backend.search('holders of this token', { limit: 3 });
+    expect(hits[0]?.name).toMatch(/^holders_/);
+    expect(hits.map((h) => h.name)).not.toContain('deployer');
+    await backend.close();
+  });
+
+  it('a synonym still reaches entries when the typed word is in no entry', async () => {
+    const backend = new Bm25Backend();
+    await backend.index([...filler, deployer], { proprietor: ['owner'] });
+    const hits = await backend.search('proprietor', { limit: 3 });
+    expect(hits[0]?.name).toBe('deployer');
+    await backend.close();
+  });
+});
